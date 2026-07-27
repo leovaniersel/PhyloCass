@@ -24,10 +24,17 @@ __all__ = [
 ]
 
 
+#: Byte-order mark.  Windows tooling sprinkles these liberally -- Notepad
+#: writes one, and PowerShell prepends one when piping into a program -- and
+#: left in place it parses as a taxon and stops ``#`` comment lines from being
+#: recognised.  It is never meaningful in Newick, so it is always dropped.
+_BOM = "﻿"
+
+
 def _split_trees(text: str) -> Iterator[str]:
     """Yield each ``;``-terminated tree, dropping blank and ``#``-comment lines."""
     kept = []
-    for line in text.splitlines():
+    for line in text.replace(_BOM, "").splitlines():
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
             continue
@@ -44,14 +51,16 @@ def read_trees(text: str) -> list[DirectedPhyNetwork]:
 
 
 def read_tree_file(path: str | Path) -> list[DirectedPhyNetwork]:
-    return read_trees(Path(path).read_text(encoding="utf-8"))
+    # utf-8-sig transparently drops a leading byte-order mark if there is one
+    return read_trees(Path(path).read_text(encoding="utf-8-sig"))
 
 
 def read_cluster_file(path: str | Path) -> tuple[set[frozenset], frozenset]:
     """Read one cluster per line, taxa separated by whitespace or commas."""
     clusters: set[frozenset] = set()
     taxa: set[str] = set()
-    for line in Path(path).read_text(encoding="utf-8").splitlines():
+    text = Path(path).read_text(encoding="utf-8-sig").replace(_BOM, "")
+    for line in text.splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
             continue

@@ -85,6 +85,37 @@ class TestClusterExtraction:
         assert fs("cd") in clusters
 
 
+class TestByteOrderMarks:
+    """Windows sprinkles BOMs: Notepad writes one, PowerShell pipes one in.
+
+    Left in place a BOM parses as a taxon, and it also stops a leading ``#``
+    comment line from being recognised as one.
+    """
+
+    BOM = "﻿"
+
+    def test_bom_at_the_start_of_a_string(self):
+        trees = read_trees(self.BOM + "((a,b),c);")
+        assert sorted(trees[0].taxa) == ["a", "b", "c"]
+
+    def test_bom_before_a_comment_line(self):
+        text = self.BOM + "# a comment\n((a,b),c);\n((a,c),b);\n"
+        assert len(read_trees(text)) == 2
+
+    def test_bom_written_by_notepad_style_utf8_sig(self, tmp_path):
+        p = tmp_path / "t.newick"
+        p.write_text("# trees\n((a,b),c);\n((a,c),b);\n", encoding="utf-8-sig")
+        assert p.read_bytes().startswith(b"\xef\xbb\xbf")
+        assert len(read_tree_file(p)) == 2
+
+    def test_bom_in_a_cluster_file(self, tmp_path):
+        p = tmp_path / "c.txt"
+        p.write_text("# clusters\na b\nc d\n", encoding="utf-8-sig")
+        clusters, taxa = read_cluster_file(p)
+        assert shown(clusters) == [("a", "b"), ("c", "d")]
+        assert taxa == fs("abcd")
+
+
 class TestFiles:
     def test_read_tree_file(self, tmp_path):
         p = tmp_path / "t.newick"

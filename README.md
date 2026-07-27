@@ -23,11 +23,14 @@ displayed trees, quartets, and so on.
 ## Install
 
 ```bash
-pip install -e .            # core
-pip install -e ".[viz]"     # with plotting (pulls in phylozoo[viz] and matplotlib)
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\Activate.ps1
+pip install -e ".[viz]"            # or just ".[dev]" / "." without plotting
 ```
 
-Pulls in `phylozoo>=0.2.6`. Python 3.10+.
+Pulls in `phylozoo>=0.2.6`. Python 3.10+. Installing puts a `phylocass`
+command on your path (inside the environment); `python -m phylocass` does the
+same thing if you would rather not activate anything.
 
 ## Command line
 
@@ -55,6 +58,11 @@ The network goes to stdout and a summary to stderr, so
 
 Output is deterministic: the same input always gives the same network, whatever
 the cluster ordering or Python's hash seed.
+
+Exit codes are `0` on success, `2` for unusable input (missing file, malformed
+Newick, nothing to do) and `1` when the search gives up under `--max-level` or
+`--time-limit`. Input is always read as UTF-8, and a byte-order mark is
+ignored, so piping from PowerShell and files saved by Notepad both work.
 
 ## Library
 

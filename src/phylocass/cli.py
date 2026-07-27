@@ -6,10 +6,30 @@ import argparse
 import sys
 from pathlib import Path
 
+from phylozoo.utils.exceptions.base import PhyloZooError
+
 from .cass import CassOptions, cass, cass_from_trees
 from .io import clusters_of_trees, read_cluster_file, read_trees
 
 __all__ = ["main"]
+
+
+def _read_stdin() -> str:
+    """Read stdin as UTF-8, whatever the platform's default encoding is.
+
+    ``sys.stdin.read()`` decodes with the locale encoding, which on Windows is
+    typically cp1252 -- so a UTF-8 taxon name, or the byte-order mark that
+    PowerShell prepends when piping, would come through mangled.  Decoding the
+    raw bytes ourselves makes piped input behave the same everywhere.
+    """
+    buffer = getattr(sys.stdin, "buffer", None)
+    if buffer is None:  # stdin replaced, e.g. by a test harness
+        return sys.stdin.read()
+    data = buffer.read()
+    try:
+        return data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return data.decode("latin-1")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -68,8 +88,10 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if args.format == "newick":
-            text = sys.stdin.read() if args.input == "-" else Path(args.input).read_text(
-                encoding="utf-8"
+            text = (
+                _read_stdin()
+                if args.input == "-"
+                else Path(args.input).read_text(encoding="utf-8-sig")
             )
             trees = read_trees(text)
             if not trees:
@@ -86,6 +108,13 @@ def main(argv: list[str] | None = None) -> int:
                 print("error: no clusters found in input", file=sys.stderr)
                 return 2
             result = cass(clusters, taxa, options)
+    except FileNotFoundError:
+        print(f"error: no such file: {args.input}", file=sys.stderr)
+        return 2
+    except PhyloZooError as exc:
+        # malformed (e)Newick and the like: report it, do not dump a traceback
+        print(f"error: could not read {args.input}: {exc}", file=sys.stderr)
+        return 2
     except RuntimeError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
