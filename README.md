@@ -32,6 +32,40 @@ Pulls in `phylozoo>=0.2.6`. Python 3.10+. Installing puts a `phylocass`
 command on your path (inside the environment); `python -m phylocass` does the
 same thing if you would rather not activate anything.
 
+<details>
+<summary>Windows: "running scripts is disabled on this system"</summary>
+
+PowerShell refuses to run `Activate.ps1` when the execution policy is
+`Restricted`, which is the default on Windows client editions. Check with
+`Get-ExecutionPolicy -List` — if every scope says `Undefined`, that default is
+what applies.
+
+You do not have to activate anything; the launchers in the environment work
+directly, and need no policy change at all:
+
+```powershell
+.\.venv\Scripts\phylocass.exe examples\conflicting_trees.newick
+.\.venv\Scripts\python.exe -m pytest
+```
+
+To activate anyway, allow local scripts for this window:
+
+```powershell
+Set-ExecutionPolicy -Scope Process RemoteSigned
+```
+
+or once and for all for your user (no administrator rights needed):
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+`RemoteSigned` is enough — it only blocks *downloaded* unsigned scripts, and
+the one in your environment is local. `cmd.exe` is unaffected either way:
+`.venv\Scripts\activate.bat`.
+
+</details>
+
 ## Command line
 
 ```bash
