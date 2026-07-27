@@ -19,7 +19,8 @@ classifiers = [
 dependencies = ["phylozoo>=0.2.6"]
 
 [project.optional-dependencies]
-dev = ["pytest>=7"]
+viz = ["phylozoo[viz]>=0.2.6"]
+dev = ["pytest>=7", "phylozoo[viz]>=0.2.6"]
 
 [project.scripts]
 phylocass = "phylocass.cli:main"

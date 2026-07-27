@@ -23,11 +23,11 @@ displayed trees, quartets, and so on.
 ## Install
 
 ```bash
-pip install -e .
+pip install -e .            # core
+pip install -e ".[viz]"     # with plotting (pulls in phylozoo[viz] and matplotlib)
 ```
 
-Pulls in `phylozoo>=0.2.6`. Python 3.10+. For plotting, install PhyloZoo's
-extra as well: `pip install "phylozoo[viz]"`.
+Pulls in `phylozoo>=0.2.6`. Python 3.10+.
 
 ## Command line
 
@@ -101,6 +101,96 @@ result.network.save("out.dot")
 clusters through PhyloZoo's `displayed_trees` — a different code path from the
 one the search uses, so it is a genuine verification rather than a restatement.
 
+## Worked example: trees in, network out, drawn
+
+Two gene trees that agree that `d` and `e` are sisters but disagree about where
+`a` belongs — one groups it with `b`, the other with `c`. No single tree
+displays both `{a,b}` and `{a,c}`, so Cass resolves the conflict with one
+reticulation.
+
+```python
+import matplotlib.pyplot as plt
+from phylozoo.viz import plot
+
+from phylocass import cass_from_trees, read_trees
+
+trees = read_trees("""
+    (((a,b),c),(d,e));
+    (((a,c),b),(d,e));
+""")
+
+result = cass_from_trees(trees)
+
+print(result.level)                # 1
+print(result.reticulation_number)  # 1
+print(result.to_enewick())         # ((d,e),((b,(a)#H1),(#H1,c)));
+print(result.represents_input())   # True
+
+# result.network is a PhyloZoo DirectedPhyNetwork, so PhyloZoo draws it
+ax = plot(result.network)
+ax.set_title(f"level {result.level}, {result.reticulation_number} reticulation")
+plt.savefig("network.png", dpi=150, bbox_inches="tight")
+plt.show()
+```
+
+`plot` needs PhyloZoo's plotting extra:
+
+```bash
+pip install "phylocass[viz]"      # or: pip install "phylozoo[viz]"
+```
+
+[`examples/plot_network.py`](examples/plot_network.py) is the runnable version,
+which also draws the input trees next to the result:
+
+```bash
+python examples/plot_network.py                                 # the example above
+python examples/plot_network.py examples/double_conflict.newick # a level-2 case
+python examples/plot_network.py my_trees.newick -o out.png --show
+```
+
+![Two conflicting input trees and the level-1 network Cass builds from their clusters](docs/example-network.png)
+
+Reticulation edges are red by default. The one reticulation has two incoming
+edges, and switching on one or the other recovers exactly the two input trees:
+
+```python
+from phylozoo.core.network.dnetwork.derivations import displayed_trees
+
+[t.to_string() for t in displayed_trees(result.network)]
+# ['((d,e),(b,(a,c)));', '((d,e),(c,(a,b)));']
+```
+
+Those are the input trees written with a different child order — the same two
+cluster sets. Nothing was lost and nothing spurious was added.
+
+`plot` takes a matplotlib `ax`, a layout name and a style object, so it composes
+normally:
+
+```python
+from phylozoo.viz.dnetwork import DNetStyle
+
+fig, (left, right) = plt.subplots(1, 2, figsize=(11, 4))
+plot(trees[0], ax=left)
+plot(result.network, ax=right, style=DNetStyle(hybrid_edge_color="crimson", node_size=300))
+for ax in (left, right):
+    ax.set_axis_off()
+```
+
+Layouts other than the default `'pz-dag'` are available: any NetworkX layout
+(`'spring'`, `'circular'`, `'kamada_kawai'`, …) works out of the box, and the
+Graphviz layouts (`'dot'`, `'neato'`, …) work if `pygraphviz` is installed —
+without it, `plot(net, layout='dot')` raises `PhyloZooImportError`. For a
+network with several tangled reticulations, `layout='dot'` is often easier to
+read than the default.
+
+If you would rather draw it elsewhere, save in a format another tool
+understands:
+
+```python
+result.network.save("network.enewick")   # eNewick, e.g. for Dendroscope
+result.network.save("network.dot")       # DOT, e.g. for Graphviz or Gephi
+```
+
 ## What the guarantees are
 
 | input | Cass gives you |
@@ -155,6 +245,7 @@ the search itself.
 | concern | comes from |
 | --- | --- |
 | (e)Newick and DOT parsing and writing | PhyloZoo `DirectedPhyNetwork` I/O |
+| drawing | PhyloZoo `viz.plot` (matplotlib) |
 | network validation | PhyloZoo `validate()` |
 | level, reticulation number | PhyloZoo `classifications` |
 | displayed trees (verification) | PhyloZoo `derivations.displayed_trees` |
@@ -253,6 +344,10 @@ Three kinds of test carry the weight:
   galled-network algorithm needs four reticulations.
 - **Determinism.** Repeated runs, shuffled input, and subprocesses started
   under different `PYTHONHASHSEED` values must all agree.
+
+The worked example above is tested too, down to the eNewick string quoted in
+this README, so the documentation cannot drift from the code. Plotting tests
+skip themselves if the `viz` extra is not installed.
 
 ## Licence
 
