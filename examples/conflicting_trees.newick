@@ -1,0 +1,4 @@
+# Two gene trees that disagree about a and b.
+# Cass resolves this with a single reticulation (level 1).
+(((a,b),c),(d,e));
+(((a,c),b),(d,e));

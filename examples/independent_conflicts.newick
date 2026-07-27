@@ -1,0 +1,5 @@
+# Two conflicts in disjoint parts of the tree. The incompatibility graph has
+# two components, so Cass builds two separate level-2 blobs rather than one
+# level-4 tangle: four reticulations in total, but level 2.
+(((a,b),(c,d)),((e,f),(g,h)));
+(((a,c),(b,d)),((e,g),(f,h)));

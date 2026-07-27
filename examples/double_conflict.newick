@@ -1,0 +1,4 @@
+# ((a,b),(c,d)) versus ((a,c),(b,d)): two leaves swap places, which no single
+# reticulation can display. Cass returns a level-2 network.
+((a,b),(c,d));
+((a,c),(b,d));

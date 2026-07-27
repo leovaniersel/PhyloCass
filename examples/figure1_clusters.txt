@@ -1,0 +1,16 @@
+# The cluster set from Figure 1 of van Iersel, Kelk, Rupp & Huson (2010).
+# The galled-network algorithm needs four reticulations for this input;
+# Cass finds the level-2 network with two reticulations.
+a b f g i
+a b c f g i
+a b f i
+b c f i
+c d e h
+d e h
+b c f h i
+b c d f h i
+b c i
+a g
+b i
+c i
+d h
