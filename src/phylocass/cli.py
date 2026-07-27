@@ -1,30 +1,15 @@
-"""Command-line interface: ``python -m phylocass``."""
+"""Command-line interface: ``python -m phylocass`` or ``phylocass``."""
 
 from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from .cass import CassOptions, cass, cass_from_trees
-from .clusters import clusters_of_trees
-from .newick import read_trees
+from .io import clusters_of_trees, read_cluster_file, read_trees
 
 __all__ = ["main"]
-
-
-def _read_clusters(text: str):
-    """Read one cluster per line, taxa separated by whitespace or commas."""
-    clusters = set()
-    taxa = set()
-    for raw in text.splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#"):
-            continue
-        members = [t for t in line.replace(",", " ").split() if t]
-        if members:
-            clusters.add(frozenset(members))
-            taxa.update(members)
-    return clusters, frozenset(taxa)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -35,12 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
             "all clusters of a set of rooted trees (the Cass algorithm)."
         ),
     )
-    p.add_argument(
-        "input",
-        nargs="?",
-        default="-",
-        help="input file, or '-' for stdin (default)",
-    )
+    p.add_argument("input", nargs="?", default="-", help="input file, or '-' for stdin")
     p.add_argument(
         "--format",
         choices=("newick", "clusters"),
@@ -57,7 +37,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--time-limit",
         type=float,
         default=None,
-        help="seconds allowed per biconnected component (default: unlimited)",
+        help="seconds per conflicting component, shared across levels (default: none)",
     )
     p.add_argument(
         "--max-networks",
@@ -66,9 +46,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="cap on intermediate networks per subproblem (default: 20000)",
     )
     p.add_argument(
-        "--show-clusters",
-        action="store_true",
-        help="also print the input clusters that were collected",
+        "--out",
+        default=None,
+        help="write the network here via PhyloZoo (.enewick/.nwk, or .dot)",
+    )
+    p.add_argument(
+        "--show-clusters", action="store_true", help="list the input clusters on stderr"
     )
     p.add_argument("--quiet", "-q", action="store_true", help="print only the network")
     return p
@@ -77,27 +60,35 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
-    text = sys.stdin.read() if args.input == "-" else open(args.input, encoding="utf-8").read()
-
     options = CassOptions(
         max_level=args.max_level,
         time_limit=args.time_limit,
         max_networks=args.max_networks,
     )
 
-    if args.format == "newick":
-        trees = read_trees(text)
-        if not trees:
-            print("error: no trees found in input", file=sys.stderr)
-            return 2
-        clusters, taxa = clusters_of_trees(trees)
-        result = cass_from_trees(trees, options)
-    else:
-        clusters, taxa = _read_clusters(text)
-        if not clusters:
-            print("error: no clusters found in input", file=sys.stderr)
-            return 2
-        result = cass(clusters, taxa, options)
+    try:
+        if args.format == "newick":
+            text = sys.stdin.read() if args.input == "-" else Path(args.input).read_text(
+                encoding="utf-8"
+            )
+            trees = read_trees(text)
+            if not trees:
+                print("error: no trees found in input", file=sys.stderr)
+                return 2
+            clusters, taxa = clusters_of_trees(trees)
+            result = cass_from_trees(trees, options)
+        else:
+            if args.input == "-":
+                print("error: --format clusters needs a file, not stdin", file=sys.stderr)
+                return 2
+            clusters, taxa = read_cluster_file(args.input)
+            if not clusters:
+                print("error: no clusters found in input", file=sys.stderr)
+                return 2
+            result = cass(clusters, taxa, options)
+    except RuntimeError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
 
     if args.show_clusters and not args.quiet:
         print(f"# {len(clusters)} clusters on {len(taxa)} taxa", file=sys.stderr)
@@ -112,6 +103,8 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
 
+    if args.out:
+        result.network.save(args.out, overwrite=True)
     print(result.to_enewick())
     return 0
 

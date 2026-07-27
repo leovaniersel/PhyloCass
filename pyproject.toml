@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "phylocass"
-version = "0.1.0"
-description = "The Cass algorithm: rooted phylogenetic networks of low level from conflicting clusters"
+version = "0.2.0"
+description = "The Cass algorithm on PhyloZoo: rooted phylogenetic networks of low level from conflicting clusters"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -16,7 +16,7 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Bio-Informatics",
   "License :: OSI Approved :: MIT License",
 ]
-dependencies = []
+dependencies = ["phylozoo>=0.2.6"]
 
 [project.optional-dependencies]
 dev = ["pytest>=7"]

@@ -1,6 +1,6 @@
 # PhyloCass
 
-A Python implementation of **Cass**, the algorithm from
+The **Cass** algorithm, implemented on top of [PhyloZoo](https://github.com/nholtgrefe/phylozoo).
 
 > L. van Iersel, S. Kelk, R. Rupp, D. Huson.
 > *Phylogenetic Networks Do not Need to Be Complex: Using Fewer Reticulations to Represent Conflicting Clusters.*
@@ -11,10 +11,14 @@ trees display, and builds a single rooted phylogenetic network that represents
 **all** of those clusters in the softwired sense — while keeping the *level* of
 the network as low as it can.
 
-The level of a network is the largest number of reticulations inside any single
-biconnected component. Minimising it, rather than the total reticulation
-number, is what lets Cass produce networks that stay readable even when the
-input trees disagree a lot.
+The level is the largest number of reticulations inside any single biconnected
+component. Minimising it, rather than the total reticulation number, is what
+lets Cass produce networks that stay readable even when the input trees
+disagree a lot.
+
+Results come back as PhyloZoo `DirectedPhyNetwork` objects, so they drop
+straight into the rest of that ecosystem — plotting, format conversion,
+displayed trees, quartets, and so on.
 
 ## Install
 
@@ -22,7 +26,8 @@ input trees disagree a lot.
 pip install -e .
 ```
 
-No dependencies beyond the standard library. Python 3.10+.
+Pulls in `phylozoo>=0.2.6`. Python 3.10+. For plotting, install PhyloZoo's
+extra as well: `pip install "phylozoo[viz]"`.
 
 ## Command line
 
@@ -33,20 +38,23 @@ phylocass examples/conflicting_trees.newick
 # from an explicit cluster list, one cluster per line
 phylocass --format clusters examples/figure1_clusters.txt
 
-# or from stdin
+# from stdin
 echo '((a,b),(c,d)); ((a,c),(b,d));' | phylocass
+
+# write the network out through PhyloZoo (.enewick/.nwk, or .dot)
+phylocass examples/double_conflict.newick --out network.enewick
 ```
 
-Output is the network in extended Newick, with reticulations written as
-`#H1`, `#H2`, …:
+The network goes to stdout and a summary to stderr, so
+`phylocass in.newick > out.enewick` gives you just the network:
 
 ```
 # taxa=4 clusters=4 level=2 reticulations=2 verified=True
-(((a,(b)#H1),(c)#H2),((d,#H1),#H2));
+(((d,(b)#H2),((a)#H1,c)),(#H1,#H2));
 ```
 
-The summary line goes to stderr and the network to stdout, so
-`phylocass in.newick > out.enewick` gives you just the network.
+Output is deterministic: the same input always gives the same network, whatever
+the cluster ordering or Python's hash seed.
 
 ## Library
 
@@ -59,10 +67,14 @@ trees = read_trees("""
 """)
 
 result = cass_from_trees(trees)
-print(result.level)                  # 1
-print(result.reticulation_number)    # 1
-print(result.to_enewick())           # (d,((c,(a,(b)#H1)),#H1));
-print(result.represents_input())     # True
+result.level                 # 1
+result.reticulation_number   # 1
+result.to_enewick()          # '(d,((b,(a)#H1),(c,#H1)));'
+result.represents_input()    # True
+
+result.network               # a phylozoo DirectedPhyNetwork
+result.network.validate()
+sorted(result.network.taxa)  # ['a', 'b', 'c', 'd']
 ```
 
 Or start from clusters directly:
@@ -70,12 +82,24 @@ Or start from clusters directly:
 ```python
 from phylocass import cass
 
-clusters = {frozenset("ab"), frozenset("bc"), frozenset("abc")}
-result = cass(clusters, taxa=frozenset("abcd"))
+result = cass({frozenset("ab"), frozenset("bc")}, taxa=frozenset("abcd"))
+```
+
+Because the result is an ordinary PhyloZoo network, everything PhyloZoo offers
+applies to it:
+
+```python
+from phylozoo.core.network.dnetwork.derivations import displayed_trees
+from phylozoo.core.network.dnetwork.classifications import level
+
+[t.to_string() for t in displayed_trees(result.network)]
+level(result.network)
+result.network.save("out.dot")
 ```
 
 `result.represents_input()` re-checks the finished network against the input
-clusters from scratch, independently of the search. It is worth calling.
+clusters through PhyloZoo's `displayed_trees` — a different code path from the
+one the search uses, so it is a genuine verification rather than a restatement.
 
 ## What the guarantees are
 
@@ -84,11 +108,11 @@ clusters from scratch, independently of the search. It is worth calling.
 | clusters that fit a tree | that tree, level 0 |
 | a level-1 network exists | a level-1 network (**proved**) |
 | a level-2 network exists | a level-2 network (**proved**) |
-| otherwise | a low-level network, in practice much lower than galled-network methods — but **not proved optimal** |
+| otherwise | a low-level network, in practice far below galled-network methods — but **not proved optimal** |
 
-The paper conjectures Cass is optimal for every level and proves a
-decomposition theorem supporting that, but only levels 1 and 2 are settled.
-`CassOptions.max_level` (default 4) bounds how far the search will climb.
+The paper conjectures Cass is optimal at every level and proves a decomposition
+theorem supporting that, but only levels 1 and 2 are settled.
+`CassOptions.max_level` (default 4) bounds how far the search climbs.
 
 ## How it works
 
@@ -96,40 +120,78 @@ Two halves, matching the paper.
 
 **Decomposition (Section 3, Steps 1–4)** — in [`cass.py`](src/phylocass/cass.py).
 The incompatibility graph `IG(C)` has the clusters as nodes and joins two
-clusters when they overlap without nesting. Each non-trivial connected
-component becomes an independent subproblem: collapse the maximal unseparated
-subsets of its support, solve it, build the tree on everything left over, then
-splice each component's network into that tree at the LCA of its taxa. Theorem
-1 of the paper is what makes this safe — if any level-*k* network exists, one
-respecting this decomposition exists.
+clusters that overlap without nesting. Each non-trivial connected component
+becomes an independent subproblem: collapse the maximal unseparated subsets of
+its support, solve it, build the tree on everything left over, then splice each
+component's network into that tree at the LCA of its taxa. Theorem 1 of the
+paper is what makes this safe — if any level-*k* network exists, one respecting
+this decomposition exists.
 
 **Simple level-*k* networks (Section 4, Algorithm 1)** — also in `cass.py`, as
-`_SimpleSearch`. Loop over the taxa; for each one, delete it from every cluster
-and collapse the maximal ST-sets of what remains. Do that *k* times and only
-two taxa are left. Then walk back out: decollapse each ST-set leaf into its
-strict subtree, and hang the removed taxon below a new reticulation fed by
-every possible pair of edges, keeping any network that represents the clusters
-at that level.
+`_SimpleSearch`. Loop over the taxa; for each, delete it from every cluster and
+collapse the maximal ST-sets of what remains. Do that *k* times and only two
+taxa are left. Then walk back out: decollapse each ST-set leaf into its strict
+subtree, and hang the removed taxon below a new reticulation fed by every
+possible pair of edges, keeping any network that represents the clusters at
+that level.
 
-Two details from the paper that are easy to miss and that PhyloCass
+Two details from the paper that are easy to miss, and that PhyloCass
 implements:
 
 - a **dummy taxon** `d` is offered alongside the real taxa at every round, and
   when `d` is the one removed the collapse step is deliberately skipped. This
   is what lets Cass build reticulations of indegree 3: hang `d`, hang the real
-  taxon, then delete `d` and contract the edge between the two reticulations.
+  taxon, delete `d`, and contract the edge left between the two reticulations.
 - every tree built at the base of the recursion gets a **dummy root** above its
-  real root, so that a reticulation edge can also be attached above the root.
-  Both dummies are stripped on output.
+  real root, so a reticulation edge can also attach above the root. Both
+  dummies are stripped on output.
+
+## How PhyloZoo is used
+
+PhyloZoo supplies the graph layer, the structural analysis and all I/O.
+PhyloCass adds the cluster combinatorics, which PhyloZoo does not cover, and
+the search itself.
+
+| concern | comes from |
+| --- | --- |
+| (e)Newick and DOT parsing and writing | PhyloZoo `DirectedPhyNetwork` I/O |
+| network validation | PhyloZoo `validate()` |
+| level, reticulation number | PhyloZoo `classifications` |
+| displayed trees (verification) | PhyloZoo `derivations.displayed_trees` |
+| biconnected components, cut-edges | PhyloZoo `d_multigraph.features` |
+| degree-2 suppression, parallel edges | PhyloZoo `d_multigraph.transformations` |
+| mutable graph engine | PhyloZoo `DirectedMultiGraph` |
+| partitions | PhyloZoo `Partition` |
+| clusters, compatibility, ST-sets, `Collapse` | PhyloCass [`clusters.py`](src/phylocass/clusters.py) |
+| the Cass search | PhyloCass [`cass.py`](src/phylocass/cass.py) |
+
+### Why there is a `WorkGraph`
+
+`DirectedPhyNetwork` is immutable and validates node degrees: internal nodes
+must be tree nodes (in-degree 1, out-degree ≥ 2) or hybrid nodes (in-degree ≥ 2,
+out-degree 1). **Every intermediate state of the Cass construction violates
+that** — subdividing an edge creates a degree-2 node, and the algorithm parks
+dummy leaves and a dummy root that only make sense mid-search.
+
+So the search runs on PhyloZoo's mutable `DirectedMultiGraph` primitive,
+wrapped as [`WorkGraph`](src/phylocass/workgraph.py), and a validated
+`DirectedPhyNetwork` is materialised only once a candidate has been cleaned up.
+That the hand-off succeeds is itself a check: if Cass produced something
+malformed, PhyloZoo rejects it.
+
+`WorkGraph` computes softwired clusters itself rather than calling
+`displayed_trees`, for two reasons: mid-search graphs are not valid networks,
+and it is the hot loop of the whole algorithm. The test suite pins that routine
+against `displayed_trees` on finished networks so the shortcut cannot drift.
 
 ### Module map
 
 | file | contents |
 | --- | --- |
 | [`clusters.py`](src/phylocass/clusters.py) | compatibility, incompatibility graph, ST-sets, `Collapse` |
-| [`network.py`](src/phylocass/network.py) | the DAG, softwired clusters, biconnected components, level, eNewick |
+| [`workgraph.py`](src/phylocass/workgraph.py) | the mutable search representation, and the hand-off to PhyloZoo |
 | [`treebuild.py`](src/phylocass/treebuild.py) | the unique tree representing a compatible cluster set |
-| [`newick.py`](src/phylocass/newick.py) | Newick reader |
+| [`io.py`](src/phylocass/io.py) | multi-tree reading, cluster extraction |
 | [`cass.py`](src/phylocass/cass.py) | the algorithm |
 | [`cli.py`](src/phylocass/cli.py) | command line |
 
@@ -141,15 +203,13 @@ terms of the *original* taxa and tracks the current level of collapsing as a
 separate partition into **blocks** — a block being a `frozenset` of original
 taxa that currently acts as one taxon. Restriction, deletion and the
 "does this network represent C?" test then need no translation layer at all.
-Leaf labels are blocks; the empty block marks a dummy leaf, which therefore
-contributes nothing to any descendant set for free.
+Leaf blocks double as leaf labels; the empty block marks a dummy leaf, which
+therefore contributes nothing to any descendant set for free.
 
 ## Performance
 
 Cass runs in `O(|X|^(3k+2) · |C|)` time for fixed level *k* — polynomial, but
-the exponent bites. Level 2 is comfortable; level 4 and up on more than a
-handful of conflicting taxa can run for a long time. `CassOptions` gives you
-three brakes:
+the exponent bites. `CassOptions` gives you three brakes:
 
 ```python
 from phylocass import cass, CassOptions
@@ -166,12 +226,11 @@ level the search climbs through. When a component exhausts its budget or
 exceeds `max_level`, `cass` raises `RuntimeError` naming the component's size
 and which limit it hit.
 
-Note that the decomposition means the cost is driven by the largest *conflicting
-component*, not by the total number of taxa — a 200-taxon dataset whose
-disagreements are local stays fast. On this machine, levels 0–2 come back in
-well under a second for the sizes above; level 4 on 6–7 mutually conflicting
-taxa takes seconds to tens of seconds, which is the `O(|X|^(3k+2))` exponent
-showing up rather than anything avoidable.
+The decomposition means cost is driven by the largest *conflicting component*,
+not by the total number of taxa — a 200-taxon dataset whose disagreements are
+local stays fast. On this machine, levels 0–2 return in well under a second;
+level 4 on 6–7 mutually conflicting taxa takes seconds to tens of seconds,
+which is the exponent showing up rather than anything avoidable.
 
 ## Tests
 
@@ -180,15 +239,23 @@ pip install -e ".[dev]"
 pytest
 ```
 
-Besides unit tests for each module, the suite includes **round-trip** tests:
-generate a random network of level ≤ 2, take the clusters it displays, run Cass
-on them, and require that Cass comes back with a network of no higher level
-that displays every one of those clusters. That is a direct test of the paper's
-exactness guarantee rather than a test against hard-coded output. The
-nine-taxon example from Figure 1 of the paper is checked too — Cass finds the
-level-2, two-reticulation network the paper reports, where the galled-network
-algorithm needs four reticulations.
+Three kinds of test carry the weight:
+
+- **Round-trips.** Generate a random network of level ≤ 2, take the clusters it
+  displays, run Cass on them, and require a network of no higher level
+  displaying every one of them. This tests the paper's exactness guarantee
+  directly rather than comparing against hard-coded output.
+- **Agreement with PhyloZoo.** The search's own softwired-cluster and level
+  routines are checked against PhyloZoo's `displayed_trees` and `level` on
+  random networks, and every finished network must pass `validate()`.
+- **The paper's example.** The nine-taxon cluster set from Figure 1 reproduces
+  the level-2, two-reticulation network the paper reports, where the
+  galled-network algorithm needs four reticulations.
+- **Determinism.** Repeated runs, shuffled input, and subprocesses started
+  under different `PYTHONHASHSEED` values must all agree.
 
 ## Licence
 
-MIT.
+MIT. PhyloZoo is MIT-licensed as well; if you use this, cite both the Cass
+paper above and the PhyloZoo preprint
+([bioRxiv:10.64898/2026.06.09.731120](https://doi.org/10.64898/2026.06.09.731120)).

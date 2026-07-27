@@ -1,6 +1,7 @@
 import pytest
 
 from phylocass.clusters import (
+    block_partition,
     collapse,
     incompatibility_graph,
     is_compatible,
@@ -15,17 +16,7 @@ from phylocass.clusters import (
     unseparated_closure,
 )
 
-
-def fs(s):
-    return frozenset(s)
-
-
-def singletons(s):
-    return [frozenset({t}) for t in s]
-
-
-def shown(parts):
-    return sorted(tuple(sorted(p)) for p in parts)
+from conftest import fs, shown, singletons
 
 
 class TestCompatibility:
@@ -159,3 +150,14 @@ class TestUnseparatedSets:
         parts = maximal_unseparated_sets(clusters, singletons("abcdefg"))
         assert frozenset().union(*parts) == fs("abcdefg")
         assert sum(len(p) for p in parts) == 7
+
+
+class TestPhyloZooInterop:
+    def test_blocks_convert_to_a_phylozoo_partition(self):
+        clusters = [fs("abc"), fs("cd")]
+        parts = maximal_unseparated_sets(clusters, singletons("abcde"))
+        partition = block_partition(parts)
+        assert partition.elements == fs("abcde")
+        assert partition.size() == 5  # size() counts elements, not parts
+        assert len(partition.parts) == len(parts)
+        assert {frozenset(p) for p in partition.parts} == set(parts)

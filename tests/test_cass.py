@@ -3,87 +3,59 @@
 import random
 
 import pytest
+from phylozoo.core.network.dnetwork.classifications import level as pz_level
 
 from phylocass import CassOptions, cass, cass_from_trees, read_trees
-from phylocass.clusters import clusters_of_trees
-from phylocass.network import Network
+from phylocass.io import clusters_of_trees, hardwired_clusters, softwired_clusters
 
-
-def fs(s):
-    return frozenset(s)
-
-
-def shown(sets):
-    return sorted(tuple(sorted(s)) for s in sets)
-
-
-def nontrivial(clusters, taxa):
-    return {c for c in clusters if 1 < len(c) < len(taxa)}
+from conftest import fs, nontrivial, random_network, random_tree, shown
 
 
 # ----------------------------------------------------------------------
-# behaviour on hand-picked inputs
+# hand-picked inputs
 # ----------------------------------------------------------------------
 
 
 class TestTrivialInputs:
     def test_identical_trees_give_a_tree(self):
-        trees = read_trees("((a,b),(c,d));  ((a,b),(c,d));")
-        r = cass_from_trees(trees)
+        r = cass_from_trees(read_trees("((a,b),(c,d)); ((a,b),(c,d));"))
         assert r.level == 0
         assert r.reticulation_number == 0
+        assert r.network.is_tree()
         assert r.represents_input()
-
-    def test_compatible_trees_give_a_tree(self):
-        # {a,b} and {a,b,c} are nested, so no conflict
-        trees = read_trees("(((a,b),c),d);  ((a,b),(c,d));")
-        clusters, taxa = clusters_of_trees(trees)
-        r = cass(clusters, taxa)
-        assert r.represents_input()
-
-    def test_refinement_is_conflict_free(self):
-        trees = read_trees("((a,b),(c,d));  (((a,b),c),d);")
-        clusters, taxa = clusters_of_trees(trees)
-        # {c,d} vs {a,b,c} overlap in c only -> genuinely incompatible
-        assert r_level(clusters, taxa) >= 1
 
     def test_single_tree_reproduces_itself(self):
-        trees = read_trees("(((a,b),c),(d,e));")
-        r = cass_from_trees(trees)
+        r = cass_from_trees(read_trees("(((a,b),c),(d,e));"))
         assert r.level == 0
-        assert nontrivial(r.network.clusters(), r.taxa) == r.clusters
+        assert nontrivial(hardwired_clusters(r.network), r.taxa) == r.clusters
 
-
-def r_level(clusters, taxa, **kw):
-    return cass(clusters, taxa, CassOptions(**kw)).level
+    def test_nested_clusters_are_not_a_conflict(self):
+        r = cass(({fs("ab"), fs("abc")}), fs("abcd"))
+        assert r.level == 0
+        assert r.represents_input()
 
 
 class TestLevelOne:
     def test_single_leaf_move(self):
-        """Moving one leaf between two trees needs exactly one reticulation."""
-        trees = read_trees("(((a,b),c),d);  (((a,c),b),d);")
-        r = cass_from_trees(trees)
+        r = cass_from_trees(read_trees("(((a,b),c),d); (((a,c),b),d);"))
         assert r.level == 1
         assert r.reticulation_number == 1
         assert r.represents_input()
 
     def test_galled_tree_clusters(self):
-        clusters = {fs("ab"), fs("bc"), fs("abc")}
-        r = cass(clusters, fs("abcd"))
+        r = cass({fs("ab"), fs("bc"), fs("abc")}, fs("abcd"))
         assert r.level == 1
         assert r.represents_input()
 
 
 class TestLevelTwo:
     def test_four_taxa_double_conflict_needs_level_two(self):
-        """{a,b},{c,d} vs {a,c},{b,d} cannot be displayed by one reticulation.
+        """((a,b),(c,d)) versus ((a,c),(b,d)) cannot be one reticulation.
 
-        A level-1 network displays exactly two trees that differ by relocating
-        a single leaf; ((a,b),(c,d)) and ((a,c),(b,d)) differ by swapping two,
-        so level 2 is optimal here.
+        A level-1 network displays two trees differing by relocating a single
+        leaf; these two differ by swapping a pair, so level 2 is optimal.
         """
-        trees = read_trees("((a,b),(c,d));  ((a,c),(b,d));")
-        r = cass_from_trees(trees)
+        r = cass_from_trees(read_trees("((a,b),(c,d)); ((a,c),(b,d));"))
         assert r.level == 2
         assert r.reticulation_number == 2
         assert r.represents_input()
@@ -91,9 +63,9 @@ class TestLevelTwo:
     def test_paper_figure_one(self):
         """The nine-taxon example from Figure 1 of the paper.
 
-        The paper states a level-2 network with two reticulations exists for
-        this cluster set, and that Cass finds it, where the galled-network
-        algorithm needs four reticulations.
+        The paper reports that a level-2 network with two reticulations exists
+        here and that Cass finds it, where the galled-network algorithm needs
+        four reticulations.
         """
         clusters = {
             fs(s)
@@ -102,8 +74,7 @@ class TestLevelTwo:
                 "bcfhi", "bcdfhi", "bci", "ag", "bi", "ci", "dh",
             )
         }
-        taxa = fs("abcdefghi")
-        r = cass(clusters, taxa)
+        r = cass(clusters, fs("abcdefghi"))
         assert r.level == 2
         assert r.reticulation_number == 2
         assert r.represents_input()
@@ -111,28 +82,59 @@ class TestLevelTwo:
 
 class TestDecomposition:
     def test_independent_conflicts_stay_in_separate_blobs(self):
-        """Two disjoint conflicts must not be merged into one biconnected component."""
-        trees = read_trees(
-            "(((a,b),(c,d)),((e,f),(g,h)));  (((a,c),(b,d)),((e,g),(f,h)));"
+        r = cass_from_trees(
+            read_trees("(((a,b),(c,d)),((e,f),(g,h))); (((a,c),(b,d)),((e,g),(f,h)));")
         )
-        r = cass_from_trees(trees)
         assert r.level == 2
         assert r.reticulation_number == 4  # two independent level-2 blobs
         assert r.represents_input()
 
     def test_conflict_plus_clean_subtree(self):
-        trees = read_trees("(((a,b),c),(x,y));  (((a,c),b),(x,y));")
-        r = cass_from_trees(trees)
+        r = cass_from_trees(read_trees("(((a,b),c),(x,y)); (((a,c),b),(x,y));"))
         assert r.level == 1
         assert r.represents_input()
-        assert fs("xy") in r.network.softwired_clusters()
+        assert fs("xy") in softwired_clusters(r.network)
 
-    def test_taxa_are_preserved(self):
-        trees = read_trees("(((a,b),c),d);  (((a,c),b),d);")
-        r = cass_from_trees(trees)
-        assert r.network.taxa() == fs("abcd")
-        labels = r.network.taxon_labels()
-        assert len(labels) == len(set(labels)) == 4
+    def test_taxa_are_preserved_exactly_once(self):
+        r = cass_from_trees(read_trees("(((a,b),c),d); (((a,c),b),d);"))
+        assert frozenset(r.network.taxa) == fs("abcd")
+        assert len(r.network.leaves) == 4
+
+
+# ----------------------------------------------------------------------
+# the output is a well-formed PhyloZoo network
+# ----------------------------------------------------------------------
+
+
+class TestPhyloZooOutput:
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "((a,b),(c,d)); ((a,c),(b,d));",
+            "(((a,b),c),d); (((a,c),b),d);",
+            "(((a,b),(c,d)),((e,f),(g,h))); (((a,c),(b,d)),((e,g),(f,h)));",
+        ],
+    )
+    def test_output_validates(self, text):
+        r = cass_from_trees(read_trees(text))
+        r.network.validate()
+
+    def test_reported_level_is_phylozoos_level(self):
+        r = cass_from_trees(read_trees("((a,b),(c,d)); ((a,c),(b,d));"))
+        assert r.level == pz_level(r.network)
+
+    def test_enewick_round_trips_through_phylozoo(self):
+        from phylozoo import DirectedPhyNetwork
+
+        r = cass_from_trees(read_trees("((a,b),(c,d)); ((a,c),(b,d));"))
+        again = DirectedPhyNetwork.from_string(r.to_enewick())
+        assert softwired_clusters(again) == softwired_clusters(r.network)
+
+    def test_no_edge_joins_two_reticulations(self):
+        r = cass_from_trees(read_trees("((a,b),(c,d)); ((a,c),(b,d));"))
+        hybrids = set(r.network.hybrid_nodes)
+        for u, v in r.network.edges:
+            assert not (u in hybrids and v in hybrids)
 
 
 # ----------------------------------------------------------------------
@@ -140,54 +142,18 @@ class TestDecomposition:
 # ----------------------------------------------------------------------
 
 
-def random_tree(rng: random.Random, names) -> Network:
-    """A random binary rooted tree on ``names``."""
-    net = Network()
-    nodes = [net.new_node(label=frozenset({n})) for n in names]
-    while len(nodes) > 1:
-        i, j = rng.sample(range(len(nodes)), 2)
-        parent = net.new_node()
-        net.add_edge(parent, nodes[i])
-        net.add_edge(parent, nodes[j])
-        nodes = [n for k, n in enumerate(nodes) if k not in (i, j)] + [parent]
-    return net
-
-
-def random_network(rng: random.Random, n_tree_leaves: int, n_ret: int) -> Network:
-    """A random tree with ``n_ret`` extra leaves hung below new reticulations."""
-    names = [chr(ord("a") + i) for i in range(n_tree_leaves)]
-    net = random_tree(rng, names)
-    for i in range(n_ret):
-        edges = net.edges()
-        # include the edge above the root as a possible attachment point
-        old_root = net.root
-        new_root = net.new_node()
-        net.add_edge(new_root, old_root)
-        edges.append((new_root, old_root))
-        e1, e2 = rng.sample(edges, 2)
-        w1 = net.subdivide(*e1)
-        w2 = net.subdivide(*e2)
-        ret = net.new_node()
-        leaf = net.new_node(label=frozenset({chr(ord("a") + n_tree_leaves + i)}))
-        net.add_edge(ret, leaf)
-        net.add_edge(w1, ret)
-        net.add_edge(w2, ret)
-        net.tidy_up()
-    return net
-
-
 @pytest.mark.parametrize("seed", range(40))
 def test_roundtrip_level_one(seed):
     """Cass must find a level-<=1 network for clusters that came from one."""
     rng = random.Random(seed)
-    net = random_network(rng, rng.randint(3, 5), 1)
-    if net.level() != 1:
+    work = random_network(rng, rng.randint(3, 5), 1)
+    if work.level() != 1:
         pytest.skip("random network degenerated")
-    clusters = {c for c in net.softwired_clusters() if 1 < len(c) < len(net.taxa())}
+    clusters = nontrivial(work.softwired_clusters(), work.taxa())
     if not clusters:
         pytest.skip("no non-trivial clusters")
-    r = cass(clusters, net.taxa(), CassOptions(max_level=3))
-    assert r.represents_input(), "output does not display every input cluster"
+    r = cass(clusters, work.taxa(), CassOptions(max_level=3))
+    assert r.represents_input()
     assert r.level <= 1, f"level {r.level} for clusters from a level-1 network"
 
 
@@ -195,14 +161,14 @@ def test_roundtrip_level_one(seed):
 def test_roundtrip_level_two(seed):
     """The paper's guarantee: exact whenever a level-<=2 network exists."""
     rng = random.Random(1000 + seed)
-    net = random_network(rng, rng.randint(3, 4), 2)
-    if net.level() != 2:
+    work = random_network(rng, rng.randint(3, 4), 2)
+    if work.level() != 2:
         pytest.skip("random network degenerated")
-    clusters = {c for c in net.softwired_clusters() if 1 < len(c) < len(net.taxa())}
+    clusters = nontrivial(work.softwired_clusters(), work.taxa())
     if not clusters:
         pytest.skip("no non-trivial clusters")
-    r = cass(clusters, net.taxa(), CassOptions(max_level=4))
-    assert r.represents_input(), "output does not display every input cluster"
+    r = cass(clusters, work.taxa(), CassOptions(max_level=4))
+    assert r.represents_input()
     assert r.level <= 2, f"level {r.level} for clusters from a level-2 network"
 
 
@@ -211,25 +177,80 @@ def test_random_trees_always_produce_a_valid_network(seed):
     """Whatever the input trees, the output must display every input cluster."""
     rng = random.Random(500 + seed)
     names = [chr(ord("a") + i) for i in range(rng.randint(4, 6))]
-    trees = [random_tree(rng, names) for _ in range(rng.randint(2, 3))]
+    trees = [random_tree(rng, names).to_phylozoo() for _ in range(rng.randint(2, 3))]
     clusters, taxa = clusters_of_trees(trees)
     try:
         r = cass(clusters, taxa, CassOptions(max_level=4, time_limit=5.0))
     except RuntimeError:
-        # a high-level instance outran the budget; that is a documented
-        # outcome, and this test is about the validity of what comes back
         pytest.skip("search budget exhausted")
     assert r.represents_input()
-    assert r.network.taxa() == taxa
-    labels = r.network.taxon_labels()
-    assert len(labels) == len(set(labels)) == len(taxa)
+    r.network.validate()
+    assert frozenset(r.network.taxa) == taxa
+
+
+# ----------------------------------------------------------------------
+# budgets
+# ----------------------------------------------------------------------
+
+
+class TestDeterminism:
+    """Several valid networks usually exist; the choice must not depend on hashing."""
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "(((a,b),c),d); (((a,c),b),d);",
+            "((a,b),(c,d)); ((a,c),(b,d));",
+            "(((a,b),(c,d)),((e,f),(g,h))); (((a,c),(b,d)),((e,g),(f,h)));",
+        ],
+    )
+    def test_repeated_runs_agree(self, text):
+        answers = {cass_from_trees(read_trees(text)).to_enewick() for _ in range(5)}
+        assert len(answers) == 1
+
+    def test_shuffling_the_input_clusters_changes_nothing(self):
+        clusters = [fs(s) for s in ("abfgi", "abfi", "bcfi", "bci", "ag", "bi", "ci")]
+        taxa = fs("abcfgi")
+        rng = random.Random(0)
+        answers = set()
+        for _ in range(5):
+            shuffled = clusters[:]
+            rng.shuffle(shuffled)
+            answers.add(cass(set(shuffled), taxa).to_enewick())
+        assert len(answers) == 1
+
+    def test_subprocesses_with_different_hash_seeds_agree(self):
+        """The real check: PYTHONHASHSEED only varies across processes."""
+        import subprocess
+        import sys
+
+        code = (
+            "from phylocass import read_trees, cass_from_trees;"
+            "print(cass_from_trees(read_trees('((a,b),(c,d)); ((a,c),(b,d));'))"
+            ".to_enewick())"
+        )
+        outputs = set()
+        for seed in ("1", "2", "3"):
+            out = subprocess.run(
+                [sys.executable, "-c", code],
+                capture_output=True,
+                text=True,
+                env={"PYTHONHASHSEED": seed, "PATH": ""},
+                check=True,
+            )
+            outputs.add(out.stdout.strip())
+        assert len(outputs) == 1
 
 
 class TestBudgets:
     def test_max_level_zero_conflicts_are_reported(self):
-        clusters = {fs("ab"), fs("bc")}
         with pytest.raises(RuntimeError, match="gave up"):
-            cass(clusters, fs("abc"), CassOptions(max_level=0))
+            cass({fs("ab"), fs("bc")}, fs("abc"), CassOptions(max_level=0))
+
+    def test_giveup_message_names_the_knobs(self):
+        with pytest.raises(RuntimeError) as excinfo:
+            cass({fs("ab"), fs("bc")}, fs("abc"), CassOptions(max_level=0))
+        assert "max_level" in str(excinfo.value)
 
     def test_time_limit_is_one_budget_for_the_whole_component(self):
         """The budget must not be re-granted at every level the search climbs."""
@@ -238,41 +259,10 @@ class TestBudgets:
         clusters = {
             fs(s) for s in ("ab", "bc", "cd", "de", "ea", "ac", "bd", "ce", "da", "eb")
         }
-        taxa = fs("abcdef")
         t0 = _time.monotonic()
         try:
-            cass(clusters, taxa, CassOptions(max_level=6, time_limit=1.0))
+            cass(clusters, fs("abcdef"), CassOptions(max_level=6, time_limit=1.0))
         except RuntimeError:
             pass
         elapsed = _time.monotonic() - t0
-        # a per-level budget would allow up to ~6s here
         assert elapsed < 4.0, f"took {elapsed:.1f}s; budget looks per-level"
-
-    def test_giveup_message_names_the_knobs(self):
-        clusters = {fs("ab"), fs("bc")}
-        with pytest.raises(RuntimeError) as excinfo:
-            cass(clusters, fs("abc"), CassOptions(max_level=0))
-        assert "max_level" in str(excinfo.value)
-
-
-class TestOutputShape:
-    def test_output_is_a_valid_dag_with_one_root(self):
-        trees = read_trees("((a,b),(c,d));  ((a,c),(b,d));")
-        r = cass_from_trees(trees)
-        assert len(r.network.roots()) == 1
-        r.network.topological_order()  # raises on a cycle
-
-    def test_enewick_is_parseable_back_into_the_same_clusters(self):
-        from phylocass.newick import parse_newick
-
-        trees = read_trees("(((a,b),c),d);  (((a,c),b),d);")
-        r = cass_from_trees(trees)
-        text = r.to_enewick()
-        assert text.endswith(";")
-        assert "#H1" in text
-
-    def test_no_edge_joins_two_reticulations(self):
-        trees = read_trees("((a,b),(c,d));  ((a,c),(b,d));")
-        n = cass_from_trees(trees).network
-        for u, v in n.edges():
-            assert not (n.is_reticulation(u) and n.is_reticulation(v))
