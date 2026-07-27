@@ -55,7 +55,11 @@ class CassOptions:
     """
 
     time_limit: float | None = None
-    """Seconds allowed per connected component, or ``None`` for no limit."""
+    """Seconds allowed per conflicting component, or ``None`` for no limit.
+
+    This is one budget for the whole component, shared across every level the
+    search climbs through -- not a fresh allowance per level.
+    """
 
     max_networks: int | None = 20000
     """Cap on the intermediate networks kept per recursive subproblem."""
@@ -85,12 +89,12 @@ class CassResult:
 
 
 class _SimpleSearch:
-    def __init__(self, clusters, blocks, k, options: CassOptions):
+    def __init__(self, clusters, blocks, k, options: CassOptions, deadline=None):
         self.k = k
         self.options = options
-        self.deadline = (
-            None if options.time_limit is None else time.monotonic() + options.time_limit
-        )
+        if deadline is None and options.time_limit is not None:
+            deadline = time.monotonic() + options.time_limit
+        self.deadline = deadline
         self.memo: dict[tuple, list[Network]] = {}
         self.top_clusters = set(clusters)
         self.top_blocks = list(blocks)
@@ -234,12 +238,17 @@ def cass_simple(
     ``blocks`` is the taxon set, each taxon given as a ``frozenset`` of the
     original taxa it stands for.  Returns ``None`` if the search found none.
     """
-    options = options or CassOptions()
-    search = _SimpleSearch(set(clusters), list(blocks), k, options)
+    net, _ = _cass_simple(clusters, blocks, k, options or CassOptions())
+    return net
+
+
+def _cass_simple(clusters, blocks, k, options, deadline=None):
+    """As :func:`cass_simple`, but also reporting whether the budget ran out."""
+    search = _SimpleSearch(set(clusters), list(blocks), k, options, deadline)
     try:
-        return search.run()
+        return search.run(), False
     except CassTimeout:
-        return None
+        return None, True
 
 
 # ----------------------------------------------------------------------
@@ -291,16 +300,28 @@ def cass(
     # ---- Step 2: a simple level-<=k network per component ----------------
     simple_networks = []
     for comp, support, blocks, collapsed in component_data:
+        # one shared budget for the whole component, not one per level attempt
+        deadline = (
+            None if options.time_limit is None else time.monotonic() + options.time_limit
+        )
         net = None
+        timed_out = False
+        reached = 0
         for k in range(1, options.max_level + 1):
-            net = cass_simple(collapsed, blocks, k, options)
-            if net is not None:
+            reached = k
+            net, timed_out = _cass_simple(collapsed, blocks, k, options, deadline)
+            if net is not None or timed_out:
                 break
         if net is None:
+            reason = (
+                f"the {options.time_limit}s budget ran out at level {reached}"
+                if timed_out
+                else f"no network exists up to level {options.max_level}"
+            )
             raise RuntimeError(
-                "Cass found no network up to level "
-                f"{options.max_level} for a component on {len(support)} taxa; "
-                "raise CassOptions.max_level or the time limit"
+                f"Cass gave up on a conflicting component of {len(support)} taxa "
+                f"and {len(comp)} clusters: {reason}. Raise CassOptions.max_level "
+                "or CassOptions.time_limit."
             )
         simple_networks.append(net)
 

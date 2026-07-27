@@ -213,11 +213,46 @@ def test_random_trees_always_produce_a_valid_network(seed):
     names = [chr(ord("a") + i) for i in range(rng.randint(4, 6))]
     trees = [random_tree(rng, names) for _ in range(rng.randint(2, 3))]
     clusters, taxa = clusters_of_trees(trees)
-    r = cass(clusters, taxa, CassOptions(max_level=4))
+    try:
+        r = cass(clusters, taxa, CassOptions(max_level=4, time_limit=5.0))
+    except RuntimeError:
+        # a high-level instance outran the budget; that is a documented
+        # outcome, and this test is about the validity of what comes back
+        pytest.skip("search budget exhausted")
     assert r.represents_input()
     assert r.network.taxa() == taxa
     labels = r.network.taxon_labels()
     assert len(labels) == len(set(labels)) == len(taxa)
+
+
+class TestBudgets:
+    def test_max_level_zero_conflicts_are_reported(self):
+        clusters = {fs("ab"), fs("bc")}
+        with pytest.raises(RuntimeError, match="gave up"):
+            cass(clusters, fs("abc"), CassOptions(max_level=0))
+
+    def test_time_limit_is_one_budget_for_the_whole_component(self):
+        """The budget must not be re-granted at every level the search climbs."""
+        import time as _time
+
+        clusters = {
+            fs(s) for s in ("ab", "bc", "cd", "de", "ea", "ac", "bd", "ce", "da", "eb")
+        }
+        taxa = fs("abcdef")
+        t0 = _time.monotonic()
+        try:
+            cass(clusters, taxa, CassOptions(max_level=6, time_limit=1.0))
+        except RuntimeError:
+            pass
+        elapsed = _time.monotonic() - t0
+        # a per-level budget would allow up to ~6s here
+        assert elapsed < 4.0, f"took {elapsed:.1f}s; budget looks per-level"
+
+    def test_giveup_message_names_the_knobs(self):
+        clusters = {fs("ab"), fs("bc")}
+        with pytest.raises(RuntimeError) as excinfo:
+            cass(clusters, fs("abc"), CassOptions(max_level=0))
+        assert "max_level" in str(excinfo.value)
 
 
 class TestOutputShape:

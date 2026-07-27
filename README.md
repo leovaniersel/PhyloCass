@@ -156,14 +156,22 @@ from phylocass import cass, CassOptions
 
 result = cass(clusters, taxa, CassOptions(
     max_level=3,        # give up above this level
-    time_limit=60.0,    # seconds per biconnected component
+    time_limit=60.0,    # seconds per conflicting component, shared across levels
     max_networks=5000,  # intermediate networks kept per subproblem
 ))
 ```
 
+`time_limit` is one budget for a whole component, not a fresh allowance at each
+level the search climbs through. When a component exhausts its budget or
+exceeds `max_level`, `cass` raises `RuntimeError` naming the component's size
+and which limit it hit.
+
 Note that the decomposition means the cost is driven by the largest *conflicting
 component*, not by the total number of taxa — a 200-taxon dataset whose
-disagreements are local stays fast.
+disagreements are local stays fast. On this machine, levels 0–2 come back in
+well under a second for the sizes above; level 4 on 6–7 mutually conflicting
+taxa takes seconds to tens of seconds, which is the `O(|X|^(3k+2))` exponent
+showing up rather than anything avoidable.
 
 ## Tests
 
