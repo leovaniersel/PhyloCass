@@ -143,6 +143,47 @@ result.network.save("out.dot")
 clusters through PhyloZoo's `displayed_trees` — a different code path from the
 one the search uses, so it is a genuine verification rather than a restatement.
 
+## Drawing it
+
+`--plot` writes the input trees and the resulting network to one image:
+
+```bash
+phylocass examples/three_trees.newick --plot network.png
+phylocass examples/three_trees.newick --plot network.pdf --plot-dpi 300
+phylocass my_trees.newick --show                    # open a window instead
+```
+
+The format follows the extension — `.png`, `.pdf` and `.svg` all work — and
+`--show` opens a window (on its own, or alongside `--plot`). Reticulation edges
+are red. The network's caption reports the level and reticulation count, and
+flags the things worth noticing: whether the trees themselves are displayed,
+and how many partial clusters Z-closure had to drop.
+
+Needs PhyloZoo's plotting extra:
+
+```bash
+pip install "phylocass[viz]"
+```
+
+From Python, the same thing:
+
+```python
+from phylocass import cass_from_trees, read_tree_file
+from phylocass.plot import plot_result, save_plot
+
+trees = read_tree_file("examples/three_trees.newick")
+result = cass_from_trees(trees)
+
+save_plot(result, "network.png", trees=trees, dpi=300)
+
+fig = plot_result(result, trees)     # or take the matplotlib Figure and adjust
+fig.axes[-1].set_title("my caption")
+```
+
+`plot_result` accepts `layout=` and `style=` and passes them to PhyloZoo, lays
+the trees out in a grid (`max_columns`), and works with no trees at all — for a
+bare cluster set it just draws the network.
+
 ## Worked example: trees in, network out, drawn
 
 Two gene trees that agree that `d` and `e` are sisters but disagree about where
@@ -175,20 +216,15 @@ plt.savefig("network.png", dpi=150, bbox_inches="tight")
 plt.show()
 ```
 
-`plot` needs PhyloZoo's plotting extra:
+That draws the network on its own. To get the input trees beside it, as below,
+use `--plot` (or `phylocass.plot.save_plot`):
 
 ```bash
-pip install "phylocass[viz]"      # or: pip install "phylozoo[viz]"
+phylocass examples/conflicting_trees.newick --plot network.png
 ```
 
-[`examples/plot_network.py`](examples/plot_network.py) is the runnable version,
-which also draws the input trees next to the result:
-
-```bash
-python examples/plot_network.py                                 # the example above
-python examples/plot_network.py examples/double_conflict.newick # a level-2 case
-python examples/plot_network.py my_trees.newick -o out.png --show
-```
+[`examples/plot_network.py`](examples/plot_network.py) is the same thing as a
+script you can edit.
 
 ![Two conflicting input trees and the level-1 network Cass builds from their clusters](docs/example-network.png)
 
@@ -524,6 +560,7 @@ against `displayed_trees` on finished networks so the shortcut cannot drift.
 | [`workgraph.py`](src/phylocass/workgraph.py) | the mutable search representation, and the hand-off to PhyloZoo |
 | [`treebuild.py`](src/phylocass/treebuild.py) | the unique tree representing a compatible cluster set |
 | [`io.py`](src/phylocass/io.py) | multi-tree reading, cluster extraction, verification |
+| [`plot.py`](src/phylocass/plot.py) | drawing the input trees and the network together |
 | [`zclosure.py`](src/phylocass/zclosure.py) | completing partial clusters from trees on differing taxon sets |
 | [`cass.py`](src/phylocass/cass.py) | the algorithm |
 | [`cli.py`](src/phylocass/cli.py) | command line |

@@ -9,7 +9,7 @@ from pathlib import Path
 from phylozoo.utils.exceptions.base import PhyloZooError
 
 from .cass import CassOptions, cass, cass_from_trees
-from .io import clusters_of_trees, read_cluster_file, read_trees
+from .io import read_cluster_file, read_trees
 
 __all__ = ["main"]
 
@@ -88,6 +88,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="write the network here via PhyloZoo (.enewick/.nwk, or .dot)",
     )
     p.add_argument(
+        "--plot",
+        metavar="IMAGE",
+        default=None,
+        help=(
+            "draw the input trees and the resulting network to an image file "
+            '(.png, .pdf, .svg); needs pip install "phylocass[viz]"'
+        ),
+    )
+    p.add_argument(
+        "--plot-dpi",
+        type=int,
+        default=150,
+        help="resolution for --plot (default: 150)",
+    )
+    p.add_argument(
+        "--show",
+        action="store_true",
+        help="open the drawing in a window as well as, or instead of, saving it",
+    )
+    p.add_argument(
         "--show-clusters", action="store_true", help="list the input clusters on stderr"
     )
     p.add_argument("--quiet", "-q", action="store_true", help="print only the network")
@@ -132,12 +152,12 @@ def main(argv: list[str] | None = None) -> int:
             if not trees:
                 print("error: no trees found in input", file=sys.stderr)
                 return 2
-            clusters, taxa = clusters_of_trees(trees)
             result = cass_from_trees(trees, options)
         else:
             if args.input == "-":
                 print("error: --format clusters needs a file, not stdin", file=sys.stderr)
                 return 2
+            trees = []
             clusters, taxa = read_cluster_file(args.input)
             if not clusters:
                 print("error: no clusters found in input", file=sys.stderr)
@@ -158,8 +178,11 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     if args.show_clusters and not args.quiet:
-        print(f"# {len(clusters)} clusters on {len(taxa)} taxa", file=sys.stderr)
-        for c in sorted(clusters, key=lambda s: (len(s), sorted(map(str, s)))):
+        print(
+            f"# {len(result.clusters)} clusters on {len(result.taxa)} taxa",
+            file=sys.stderr,
+        )
+        for c in sorted(result.clusters, key=lambda s: (len(s), sorted(map(str, s)))):
             print("#   {" + ", ".join(sorted(map(str, c))) + "}", file=sys.stderr)
 
     if not args.quiet and result.z_closure is not None:
@@ -183,6 +206,24 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.out:
         result.network.save(args.out, overwrite=True)
+
+    if args.plot or args.show:
+        from .plot import PlotUnavailable, save_plot
+
+        try:
+            written = save_plot(
+                result,
+                args.plot or "phylocass.png",
+                trees=trees,
+                dpi=args.plot_dpi,
+                show=args.show,
+            )
+        except PlotUnavailable as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        if not args.quiet:
+            print(f"# wrote {written}", file=sys.stderr)
+
     print(result.to_enewick())
     return 0
 
