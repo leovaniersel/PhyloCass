@@ -1,5 +1,9 @@
 # PhyloCass
 
+[![PyPI](https://img.shields.io/pypi/v/phylocass.svg)](https://pypi.org/project/phylocass/)
+[![Python versions](https://img.shields.io/pypi/pyversions/phylocass.svg)](https://pypi.org/project/phylocass/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 The **Cass** algorithm, implemented on top of [PhyloZoo](https://github.com/nholtgrefe/phylozoo).
 
 > L. van Iersel, S. Kelk, R. Rupp, D. Huson.
@@ -38,9 +42,6 @@ source .venv/bin/activate          # Windows: .venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
 ```
 
-> **Not on PyPI yet** — the first release is in flight; see
-> [RELEASING.md](RELEASING.md). Until it lands:
-> `pip install git+https://github.com/leovaniersel/PhyloCass.git`
 
 <details>
 <summary>Windows: "running scripts is disabled on this system"</summary>
