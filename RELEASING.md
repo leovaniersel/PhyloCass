@@ -5,21 +5,19 @@ pass `twine check`, and each has been installed into a clean environment and
 exercised. What is left needs a PyPI account, which is why it is not automated
 away here.
 
-## Before the first release, decide two things
+## Two things that used to block this, now settled
 
-**1. Publishing makes the source public.** `leovaniersel/PhyloCass` is a private
-repository, but a PyPI release publishes the sdist — which contains the whole
-source tree — to anyone who asks for it. There is no private mode. If the code
-should stay private, do not publish; install from the repository instead:
+**Source visibility.** A PyPI release publishes the sdist, which contains the
+whole source tree; there is no private mode. `leovaniersel/PhyloCass` is public,
+so this is moot.
 
-```bash
-pip install git+ssh://git@github.com/leovaniersel/PhyloCass.git
-```
+**Repository links.** `pyproject.toml` points Homepage, Repository and Issues at
+`github.com/leovaniersel/PhyloCass`. Those resolve, now that the repository is
+public.
 
-**2. The metadata links to the repository.** `pyproject.toml` points Homepage,
-Repository and Issues at `github.com/leovaniersel/PhyloCass`. While the repo is
-private those links 404 for everyone reading the PyPI page. Either make the
-repository public alongside the release, or drop the `[project.urls]` table.
+The one prerequisite left is registering a trusted publisher on PyPI — see
+below. It has to exist *before* the release fires, because the workflow
+authenticates against it.
 
 ## Test it on TestPyPI first
 
@@ -56,7 +54,10 @@ the workflow below, which needs no token on your machine at all.
 and uploads whenever you publish a GitHub release. It uses PyPI's trusted
 publishing, so there is no API token to create, store or rotate.
 
-One-time setup, on <https://pypi.org/manage/account/publishing/>:
+One-time setup, on <https://pypi.org/manage/account/publishing/>. Because
+`phylocass` does not exist on PyPI yet, this goes under **"Add a new pending
+publisher"** — a project-scoped publisher can only be added to a project that
+already exists:
 
 | field | value |
 | --- | --- |
@@ -66,13 +67,16 @@ One-time setup, on <https://pypi.org/manage/account/publishing/>:
 | Workflow name | `publish.yml` |
 | Environment name | `pypi` |
 
-Then create the `pypi` environment in the repository settings, and release:
+The `pypi` GitHub environment already exists. Then release:
 
 ```bash
-git tag v0.3.0
-git push origin v0.3.0
-gh release create v0.3.0 --generate-notes    # or use the web UI
+git tag v0.3.0 && git push origin v0.3.0     # already done for v0.3.0
+gh release create v0.3.0 --generate-notes    # or the web UI, or the REST API
 ```
+
+`gh` is not installed on the author's machine; the web UI at
+`github.com/leovaniersel/PhyloCass/releases/new?tag=v0.3.0` and the REST API
+(`POST /repos/{owner}/{repo}/releases`) both work just as well.
 
 ## Version numbers
 

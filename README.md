@@ -38,10 +38,9 @@ source .venv/bin/activate          # Windows: .venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
 ```
 
-> **Not on PyPI yet.** The package builds and installs cleanly, but publishing
-> would make the source public and this repository is private — see
-> [RELEASING.md](RELEASING.md). Until then, install from the repository:
-> `pip install git+ssh://git@github.com/leovaniersel/PhyloCass.git`
+> **Not on PyPI yet** — the first release is in flight; see
+> [RELEASING.md](RELEASING.md). Until it lands:
+> `pip install git+https://github.com/leovaniersel/PhyloCass.git`
 
 <details>
 <summary>Windows: "running scripts is disabled on this system"</summary>
