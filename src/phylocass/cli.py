@@ -66,6 +66,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="cap on intermediate networks per subproblem (default: 20000)",
     )
     p.add_argument(
+        "--z-closure",
+        action="store_true",
+        help=(
+            "accept input trees with different but overlapping taxon sets, by "
+            "completing their partial clusters with Z-closure first (heuristic)"
+        ),
+    )
+    p.add_argument(
         "--display-trees",
         action="store_true",
         help=(
@@ -94,15 +102,24 @@ def main(argv: list[str] | None = None) -> int:
         time_limit=args.time_limit,
         max_networks=args.max_networks,
         display_trees=args.display_trees,
+        z_closure=args.z_closure,
     )
 
-    if args.display_trees and args.format == "clusters":
-        print(
-            "error: --display-trees needs tree input; a bare cluster list does "
-            "not say which cluster came from which tree",
-            file=sys.stderr,
-        )
-        return 2
+    if args.format == "clusters":
+        if args.display_trees:
+            print(
+                "error: --display-trees needs tree input; a bare cluster list does "
+                "not say which cluster came from which tree",
+                file=sys.stderr,
+            )
+            return 2
+        if args.z_closure:
+            print(
+                "error: --z-closure needs tree input; a bare cluster list does "
+                "not say which taxon set each cluster is known on",
+                file=sys.stderr,
+            )
+            return 2
 
     try:
         if args.format == "newick":
@@ -126,6 +143,9 @@ def main(argv: list[str] | None = None) -> int:
                 print("error: no clusters found in input", file=sys.stderr)
                 return 2
             result = cass(clusters, taxa, options)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     except FileNotFoundError:
         print(f"error: no such file: {args.input}", file=sys.stderr)
         return 2
@@ -141,6 +161,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"# {len(clusters)} clusters on {len(taxa)} taxa", file=sys.stderr)
         for c in sorted(clusters, key=lambda s: (len(s), sorted(map(str, s)))):
             print("#   {" + ", ".join(sorted(map(str, c))) + "}", file=sys.stderr)
+
+    if not args.quiet and result.z_closure is not None:
+        z = result.z_closure
+        print(
+            f"# z-closure: {z.partial_total} clusters known, {len(z.clusters)} "
+            f"complete, {z.dropped} dropped as still partial "
+            f"({z.rounds} rounds{', hit the cap' if z.hit_limit else ''})",
+            file=sys.stderr,
+        )
 
     if not args.quiet:
         displays = result.displays_input_trees()

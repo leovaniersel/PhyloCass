@@ -1,0 +1,11 @@
+# Two trees on different but overlapping taxon sets: neither contains all of
+# a, b, c, d, e. Their clusters are *partial* -- a tree says nothing about the
+# taxa it is missing -- so plain Cass refuses this input.
+#
+#   phylocass examples/partial_trees.newick               refuses, and says why
+#   phylocass examples/partial_trees.newick --z-closure   completes and builds
+#
+# Z-closure extends {a,b} and {a,c} to the full taxon set and derives {a,b,c},
+# leaving a genuine conflict that needs one reticulation.
+(((a,b),c),d);
+(((a,c),b),e);

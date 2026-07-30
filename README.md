@@ -328,6 +328,97 @@ compares cluster sets, which is the natural reading but is not the same as
 displaying each tree on its own taxon set. Restrict the trees to their common
 taxa first if that distinction matters to you.
 
+## Trees with different taxon sets
+
+Cass needs clusters of a single taxon set. A tree missing some taxa only gives
+**partial** clusters: `{a,b}` seen on `{a,b,c}` says a and b group against c,
+and says *nothing* about the taxa that tree lacks. Handing such a cluster to
+Cass as if it were a full cluster asserts more than the tree does, so
+`cass_from_trees` refuses input whose trees disagree about the taxa, and says
+why.
+
+Setting `z_closure` completes them first, using the Z-closure of Huson,
+Dezulian, Klöpper and Steel (2004): partial splits are combined by a rule until
+nothing new appears, and whichever have grown to cover the whole taxon set are
+handed to the ordinary algorithm.
+
+```bash
+phylocass examples/partial_trees.newick              # refuses, and explains
+phylocass examples/partial_trees.newick --z-closure  # completes, then builds
+```
+
+```python
+from phylocass import CassOptions, cass_from_trees, read_trees
+
+trees = read_trees("(((a,b),c),d); (((a,c),b),e);")   # neither has all 5 taxa
+result = cass_from_trees(trees, CassOptions(z_closure=True))
+
+result.level                      # 1
+result.z_closure.dropped          # clusters that stayed partial and were lost
+```
+
+### The rule
+
+For partial splits `S₁ = A₁|Ã₁` and `S₂ = A₂|Ã₂`, the Z-rule fires when exactly
+one of the four intersections is empty — which is where the name comes from:
+
+> if `A₁∩A₂ ≠ ∅`, `A₂∩Ã₁ ≠ ∅`, `Ã₁∩Ã₂ ≠ ∅` and **`A₁∩Ã₂ = ∅`**,
+> produce `A₁|(Ã₁∪Ã₂)` and `(A₁∪A₂)|Ã₂`.
+
+Rooted clusters need one adjustment. A split does not say which side is which,
+but a cluster does — and every input tree shares the root, so conceptually each
+tree gains a root taxon that always sits opposite the cluster. That pins the
+orientation and makes `Ã₁∩Ã₂ ≠ ∅` automatic. Since `Aᵢ` may be *either* part of
+split *i*, working through the combinations leaves two rules (one never fires,
+because the root taxon is on both root sides; one is another with the pair
+swapped). Writing `R = X \ C` for the root side of cluster `C` known on `X`:
+
+| | condition | consequence |
+| --- | --- | --- |
+| **overlapping** | `C₁∩C₂ ≠ ∅`, `C₂∩R₁ ≠ ∅`, `C₁∩R₂ = ∅` | `C₁` is known on `X₁∪R₂`; `C₁∪C₂` is a cluster known on `C₁∪X₂` |
+| **disjoint** | `C₁∩C₂ = ∅`, `C₁∩R₂ ≠ ∅`, `C₂∩R₁ ≠ ∅` | `C₁` is known on `X₁∪C₂` |
+
+Widening the taxon set is what does the real work — it is how a partial cluster
+becomes full. The disjoint rule matters more than it looks: most clusters of one
+tree are disjoint from most clusters of another, and without it very little
+completes.
+
+PhyloCass keeps only the widest taxon set per cluster, so the state only grows
+and the closure is a genuine fixed point — order-independent, and therefore
+deterministic. That differs from the "replace the two inputs" reading of the
+rule, which is order-dependent and is why implementations usually randomise the
+order and repeat.
+
+### What to expect
+
+Z-closure is **incomplete**: it does not derive every cluster the input
+implies, which is what motivated the later M- and Y-rules. Clusters that never
+reach the full taxon set are dropped, so information is lost twice over.
+
+Measured on random trees restricted to subsets of their taxa, then rebuilt —
+checking each input tree against the *sub-network on that tree's taxa*, which
+is the right question for partial input:
+
+| input | input trees recovered | clusters dropped |
+| --- | --- | --- |
+| 6–8 taxa, 2–3 trees, 1 taxon missing | 78% | 39% |
+| 8–10 taxa, 3–4 trees, 1 taxon missing | 93% | 40% |
+| 6–8 taxa, 2–3 trees, 1–2 missing | 72% | 47% |
+| 8–10 taxa, 4–5 trees, 1–3 missing | 89% | 59% |
+
+More trees and more overlap give the rule more to work with. Sparse overlap
+recovers less. Treat the result as a supernetwork-style summary, not as a
+reconstruction.
+
+`displays_partial_trees(network, trees)` is the check used above: it restricts
+the network to each tree's taxa with PhyloZoo's `subnetwork` and then asks
+whether that displays the tree. Use it rather than `displays_input_trees()`
+when the taxon sets differ — comparing raw cluster sets asks something
+stronger and slightly wrong.
+
+> D. Huson, T. Dezulian, T. Klöpper, M. Steel. *Phylogenetic super-networks
+> from partial trees.* IEEE/ACM TCBB **1**(4):151–158, 2004.
+
 ## What the guarantees are
 
 | input | Cass gives you |
@@ -337,6 +428,7 @@ taxa first if that distinction matters to you.
 | a level-2 network exists | a level-2 network (**proved**) |
 | otherwise | a low-level network, in practice far below galled-network methods — but **not proved optimal** |
 | `display_trees=True` | a network displaying the input trees — **heuristic**, no optimality claim |
+| `z_closure=True` | trees on differing taxon sets accepted — **heuristic**, and lossy: what Z-closure cannot complete is dropped |
 
 The paper conjectures Cass is optimal at every level and proves a decomposition
 theorem supporting that, but only levels 1 and 2 are settled.
@@ -431,7 +523,8 @@ against `displayed_trees` on finished networks so the shortcut cannot drift.
 | [`clusters.py`](src/phylocass/clusters.py) | compatibility, incompatibility graph, ST-sets, `Collapse` |
 | [`workgraph.py`](src/phylocass/workgraph.py) | the mutable search representation, and the hand-off to PhyloZoo |
 | [`treebuild.py`](src/phylocass/treebuild.py) | the unique tree representing a compatible cluster set |
-| [`io.py`](src/phylocass/io.py) | multi-tree reading, cluster extraction |
+| [`io.py`](src/phylocass/io.py) | multi-tree reading, cluster extraction, verification |
+| [`zclosure.py`](src/phylocass/zclosure.py) | completing partial clusters from trees on differing taxon sets |
 | [`cass.py`](src/phylocass/cass.py) | the algorithm |
 | [`cli.py`](src/phylocass/cli.py) | command line |
 

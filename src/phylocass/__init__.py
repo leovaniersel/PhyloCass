@@ -37,6 +37,7 @@ from .clusters import (
 )
 from .io import (
     clusters_of_trees,
+    displays_partial_trees,
     displays_trees,
     hardwired_clusters,
     per_tree_clusters,
@@ -47,13 +48,19 @@ from .io import (
 )
 from .treebuild import build_tree
 from .workgraph import WorkGraph
+from .zclosure import PartialCluster, ZClosureResult, partial_clusters, z_closure
 
 __version__ = "0.2.0"
 
 __all__ = [
     "CassOptions",
     "CassResult",
+    "PartialCluster",
     "WorkGraph",
+    "ZClosureResult",
+    "displays_partial_trees",
+    "partial_clusters",
+    "z_closure",
     "block_partition",
     "build_tree",
     "cass",

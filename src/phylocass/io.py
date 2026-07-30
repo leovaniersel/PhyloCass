@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Iterable, Iterator
 
 from phylozoo import DirectedPhyNetwork
-from phylozoo.core.network.dnetwork.derivations import displayed_trees
+from phylozoo.core.network.dnetwork.derivations import displayed_trees, subnetwork
 
 __all__ = [
     "read_trees",
@@ -21,6 +21,7 @@ __all__ = [
     "hardwired_clusters",
     "softwired_clusters",
     "displays_trees",
+    "displays_partial_trees",
     "clusters_of_trees",
     "per_tree_clusters",
 ]
@@ -148,6 +149,36 @@ def displays_trees(
         return True
     available = [hardwired_clusters(t) for t in displayed_trees(network)]
     return all(any(want <= have for have in available) for want in wanted)
+
+
+def displays_partial_trees(
+    network: DirectedPhyNetwork, trees: Iterable[DirectedPhyNetwork]
+) -> list[bool]:
+    """Does ``network``, restricted to each tree's taxa, display that tree?
+
+    This is the right question when the input trees have different taxon sets:
+    a tree on a subset of the taxa can only be displayed by the corresponding
+    sub-network.  Comparing raw cluster sets would ask something stronger and
+    slightly wrong.
+
+    Restriction is PhyloZoo's ``subnetwork``; the check is then the usual one.
+    Returns one verdict per tree, in order.
+    """
+    verdicts = []
+    for tree in trees:
+        taxa = sorted(tree.taxa)
+        wanted = {c for c in hardwired_clusters(tree) if 1 < len(c) < len(taxa)}
+        if not wanted:
+            verdicts.append(True)
+            continue
+        try:
+            restricted = subnetwork(network, taxa)
+        except Exception:
+            verdicts.append(False)
+            continue
+        available = [hardwired_clusters(t) for t in displayed_trees(restricted)]
+        verdicts.append(any(wanted <= have for have in available))
+    return verdicts
 
 
 def clusters_of_trees(

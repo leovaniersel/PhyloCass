@@ -52,6 +52,7 @@ from .io import (
 )
 from .treebuild import add_root_edge, build_tree, graft
 from .workgraph import DUMMY, WorkGraph, default_namer
+from .zclosure import ZClosureResult, partial_clusters, z_closure
 
 __all__ = ["CassOptions", "CassResult", "cass", "cass_from_trees", "cass_simple"]
 
@@ -93,6 +94,21 @@ class CassOptions:
     max_networks: int | None = 20000
     """Cap on the intermediate networks kept per recursive subproblem."""
 
+    z_closure: bool = False
+    """Accept input trees whose taxon sets differ, via Z-closure.
+
+    Cass itself needs clusters of a single taxon set.  A tree missing some taxa
+    only gives *partial* clusters, and treating those as full clusters asserts
+    more than the tree does -- so by default :func:`cass_from_trees` refuses
+    input whose trees disagree about the taxa.
+
+    With this set, the partial clusters are first closed under the Z-rule of
+    Huson et al. (2004); whichever grow to cover the whole taxon set are handed
+    to the ordinary algorithm.  See :mod:`phylocass.zclosure`.  Clusters that
+    never become full are dropped, which makes this a heuristic on two counts:
+    Z-closure is incomplete, and dropping loses information.
+    """
+
     display_trees: bool = False
     """Require the network to display the input *trees*, not just their clusters.
 
@@ -126,6 +142,8 @@ class CassResult:
     taxa: frozenset = field(repr=False, default_factory=frozenset)
     tree_clusters: list[set[frozenset]] | None = field(repr=False, default=None)
     display_trees: bool = field(repr=False, default=False)
+    z_closure: "ZClosureResult | None" = field(repr=False, default=None)
+    """Set when the input trees had differing taxon sets; see :mod:`phylocass.zclosure`."""
 
     def represents_input(self) -> bool:
         """Re-check the finished network against the input clusters.
@@ -518,9 +536,40 @@ def cass_from_trees(
     With ``options.display_trees`` set, the network is required to display the
     input trees themselves, making the reticulation number an upper bound on
     their hybridization number.
+
+    With ``options.z_closure`` set, trees on differing taxon sets are accepted:
+    their partial clusters are completed by Z-closure first.
     """
+    options = options or CassOptions()
     trees = list(trees)
-    clusters, taxa = clusters_of_trees(trees)
-    return cass(
-        clusters, taxa, options, tree_clusters=per_tree_clusters(trees, taxa)
+    taxon_sets = [frozenset(t.taxa) for t in trees]
+    taxa: frozenset = frozenset().union(*taxon_sets) if taxon_sets else frozenset()
+    partial = [x for x in taxon_sets if x != taxa]
+
+    if not partial:
+        clusters, taxa = clusters_of_trees(trees)
+        return cass(
+            clusters, taxa, options, tree_clusters=per_tree_clusters(trees, taxa)
+        )
+
+    if not options.z_closure:
+        missing = sorted(taxa - min(partial, key=len), key=str)
+        raise ValueError(
+            f"{len(partial)} of {len(trees)} input trees are missing taxa "
+            f"(one lacks {missing[:4]}{'...' if len(missing) > 4 else ''}). "
+            "Their clusters are partial: a tree says nothing about the taxa it "
+            "does not contain, so using them as full clusters would assert more "
+            "than the data. Set CassOptions(z_closure=True) to complete them by "
+            "Z-closure first, or restrict the trees to their common taxa."
+        )
+
+    partials, taxa = partial_clusters(trees)
+    closure = z_closure(partials, taxa)
+    result = cass(
+        closure.clusters,
+        taxa,
+        options,
+        tree_clusters=closure.tree_clusters,
     )
+    result.z_closure = closure
+    return result
