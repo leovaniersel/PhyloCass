@@ -233,6 +233,74 @@ result.network.save("network.enewick")   # eNewick, e.g. for Dendroscope
 result.network.save("network.dot")       # DOT, e.g. for Graphviz or Gephi
 ```
 
+## Displaying the trees, not just their clusters
+
+By default Cass does what the paper describes: every input cluster must be
+represented by **some** switching of the network. Two clusters of the same
+input tree are free to need *different* switchings — so the network represents
+all the clusters without necessarily displaying any of the trees they came
+from.
+
+Setting `display_trees` strengthens the requirement: all clusters of one input
+tree must appear in **one and the same** switching. That switching's tree then
+displays the input tree, so the network displays the trees themselves. Its
+reticulation number is therefore an upper bound on the **hybridization number**
+of the input trees, which turns Cass into a heuristic for Hybridization Number
+on multiple trees.
+
+```bash
+phylocass examples/three_trees.newick                  # level 2, 2 reticulations
+phylocass examples/three_trees.newick --display-trees  # level 3, 3 reticulations
+```
+
+```python
+from phylocass import CassOptions, cass_from_trees, read_tree_file
+
+trees = read_tree_file("examples/three_trees.newick")
+
+plain = cass_from_trees(trees)
+plain.reticulation_number       # 2
+plain.represents_input()        # True  - all clusters are there
+plain.displays_input_trees()    # False - but not one switching per tree
+
+hybrid = cass_from_trees(trees, CassOptions(display_trees=True))
+hybrid.reticulation_number      # 3  <- heuristic bound on the hybridization number
+hybrid.displays_input_trees()   # True
+```
+
+Those three trees are the smallest case in `examples/` where the modes differ:
+they agree that `d` and `e` are sisters but each place `a` somewhere else.
+
+`displays_input_trees()` is checked through PhyloZoo's `displayed_trees`, so it
+verifies the finished network independently of the search — and it is worth
+calling in either mode, since cluster mode often happens to display the trees
+anyway. It returns `None` when Cass was handed a bare cluster set, because
+then nothing records which cluster came from which tree.
+
+### What to expect
+
+On random inputs, display mode cost **no extra reticulations at all for two
+trees** (40/40 cases), and one or two extra for three and four trees (20 of 31
+cases). Two trees rarely need the option; three or more often do.
+
+Two caveats worth stating plainly:
+
+- **It is a heuristic, with no optimality guarantee.** The paper's exactness
+  results are about cluster mode. Worse, its decomposition theorem is about
+  *level*, and the paper notes explicitly that the analogous statement for
+  reticulation number does **not** hold — so splitting the problem along the
+  incompatibility graph, which is what makes Cass fast, is itself an
+  approximation when you are counting reticulations. Treat the number as an
+  upper bound produced by a heuristic, not as the hybridization number.
+- **It is slower, and climbs higher.** A stronger acceptance test rejects more
+  candidates, so the search reaches further up the levels; expect to raise
+  `max_level` and to want a `time_limit`.
+
+If your input trees do not all have the same taxon set, the check still
+compares cluster sets, which is the natural reading but is not the same as
+displaying each tree on its own taxon set. Restrict the trees to their common
+taxa first if that distinction matters to you.
+
 ## What the guarantees are
 
 | input | Cass gives you |
@@ -241,6 +309,7 @@ result.network.save("network.dot")       # DOT, e.g. for Graphviz or Gephi
 | a level-1 network exists | a level-1 network (**proved**) |
 | a level-2 network exists | a level-2 network (**proved**) |
 | otherwise | a low-level network, in practice far below galled-network methods — but **not proved optimal** |
+| `display_trees=True` | a network displaying the input trees — **heuristic**, no optimality claim |
 
 The paper conjectures Cass is optimal at every level and proves a decomposition
 theorem supporting that, but only levels 1 and 2 are settled.
@@ -266,6 +335,17 @@ taxa are left. Then walk back out: decollapse each ST-set leaf into its strict
 subtree, and hang the removed taxon below a new reticulation fed by every
 possible pair of edges, keeping any network that represents the clusters at
 that level.
+
+Display mode changes exactly one thing in that picture: the acceptance test.
+Each cluster is tagged with the trees it came from, and that tag survives every
+step of the recursion — a cluster is removed, collapsed and projected in step
+with the tree it belongs to — so at the point where Cass asks "does this
+network represent the clusters?", it can instead ask "does one switching
+account for the whole of each tree?". Nothing else about the search changes.
+Within a component the requirement is restricted to the clusters that component
+holds; switchings in different biconnected components are independent, so one
+switching per component composes into a single global switching per tree, and
+clusters that sit on the backbone tree hold under every switching anyway.
 
 Two details from the paper that are easy to miss, and that PhyloCass
 implements:

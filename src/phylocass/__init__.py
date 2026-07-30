@@ -37,7 +37,9 @@ from .clusters import (
 )
 from .io import (
     clusters_of_trees,
+    displays_trees,
     hardwired_clusters,
+    per_tree_clusters,
     read_cluster_file,
     read_tree_file,
     read_trees,
@@ -59,7 +61,9 @@ __all__ = [
     "cass_simple",
     "clusters_of_trees",
     "collapse",
+    "displays_trees",
     "hardwired_clusters",
+    "per_tree_clusters",
     "incompatibility_graph",
     "is_compatible",
     "is_separated",

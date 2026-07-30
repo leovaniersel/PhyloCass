@@ -66,6 +66,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="cap on intermediate networks per subproblem (default: 20000)",
     )
     p.add_argument(
+        "--display-trees",
+        action="store_true",
+        help=(
+            "require the network to display the input trees, not just their "
+            "clusters; makes the reticulation number a heuristic upper bound "
+            "on the hybridization number (Newick input only)"
+        ),
+    )
+    p.add_argument(
         "--out",
         default=None,
         help="write the network here via PhyloZoo (.enewick/.nwk, or .dot)",
@@ -84,7 +93,16 @@ def main(argv: list[str] | None = None) -> int:
         max_level=args.max_level,
         time_limit=args.time_limit,
         max_networks=args.max_networks,
+        display_trees=args.display_trees,
     )
+
+    if args.display_trees and args.format == "clusters":
+        print(
+            "error: --display-trees needs tree input; a bare cluster list does "
+            "not say which cluster came from which tree",
+            file=sys.stderr,
+        )
+        return 2
 
     try:
         if args.format == "newick":
@@ -125,10 +143,12 @@ def main(argv: list[str] | None = None) -> int:
             print("#   {" + ", ".join(sorted(map(str, c))) + "}", file=sys.stderr)
 
     if not args.quiet:
+        displays = result.displays_input_trees()
+        extra = "" if displays is None else f" displays-trees={displays}"
         print(
             f"# taxa={len(result.taxa)} clusters={len(result.clusters)} "
             f"level={result.level} reticulations={result.reticulation_number} "
-            f"verified={result.represents_input()}",
+            f"verified={result.represents_input()}{extra}",
             file=sys.stderr,
         )
 

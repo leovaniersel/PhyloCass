@@ -20,7 +20,9 @@ __all__ = [
     "read_cluster_file",
     "hardwired_clusters",
     "softwired_clusters",
+    "displays_trees",
     "clusters_of_trees",
+    "per_tree_clusters",
 ]
 
 
@@ -113,6 +115,39 @@ def softwired_clusters(network: DirectedPhyNetwork) -> set[frozenset]:
     for tree in displayed_trees(network):
         found |= hardwired_clusters(tree)
     return found
+
+
+def per_tree_clusters(
+    trees: Iterable[DirectedPhyNetwork], taxa: frozenset | None = None
+) -> list[set[frozenset]]:
+    """The non-trivial clusters of each tree, kept separate per tree.
+
+    This is the provenance the display-mode search needs: which clusters have
+    to end up in one and the same switching.
+    """
+    trees = list(trees)
+    if taxa is None:
+        taxa = frozenset().union(*(frozenset(t.taxa) for t in trees)) if trees else frozenset()
+    return [
+        {c for c in hardwired_clusters(t) if 1 < len(c) < len(taxa)} for t in trees
+    ]
+
+
+def displays_trees(
+    network: DirectedPhyNetwork, tree_clusters: Iterable[Iterable[frozenset]]
+) -> bool:
+    """Does ``network`` display each tree, checked through PhyloZoo?
+
+    For every tree there must be one displayed tree whose clusters include all
+    of it.  Uses PhyloZoo's ``displayed_trees``, so it is independent of the
+    search's own machinery.
+    """
+    wanted = [{c for c in want if c} for want in tree_clusters]
+    wanted = [w for w in wanted if w]
+    if not wanted:
+        return True
+    available = [hardwired_clusters(t) for t in displayed_trees(network)]
+    return all(any(want <= have for have in available) for want in wanted)
 
 
 def clusters_of_trees(

@@ -35,6 +35,7 @@ __all__ = [
     "maximal_unseparated_sets",
     "unseparated_closure",
     "collapse",
+    "project",
     "round_up",
     "block_partition",
 ]
@@ -99,6 +100,23 @@ def round_up(cluster: frozenset, blocks: Iterable[frozenset]) -> frozenset:
         if b & cluster:
             out |= b
     return out
+
+
+def project(clusters: Iterable[frozenset], blocks: Iterable[frozenset]) -> set[frozenset]:
+    """Rewrite ``clusters`` over ``blocks``, dropping the ones that go trivial.
+
+    A cluster that ends up equal to a single block, or to the whole taxon set,
+    is represented by every network on those blocks under every switching, so
+    carrying it further constrains nothing.
+    """
+    blocks = list(blocks)
+    ground: frozenset = frozenset().union(*blocks) if blocks else frozenset()
+    block_set = set(blocks)
+    return {
+        r
+        for c in clusters
+        if (r := round_up(c, blocks)) and r != ground and r not in block_set
+    }
 
 
 def block_partition(blocks: Iterable[frozenset]) -> Partition:
@@ -207,17 +225,8 @@ def collapse(
     clusters = list(clusters)
     blocks = list(blocks)
     new_blocks = maximal_st_sets(clusters, blocks)
-    ground: frozenset = frozenset().union(*new_blocks) if new_blocks else frozenset()
-
     decollapse_map = {nb: canonical(b for b in blocks if b <= nb) for nb in new_blocks}
-    new_block_set = set(new_blocks)
-
-    new_clusters = {
-        r
-        for c in clusters
-        if (r := round_up(c, new_blocks)) and r != ground and r not in new_block_set
-    }
-    return new_blocks, decollapse_map, new_clusters
+    return new_blocks, decollapse_map, project(clusters, new_blocks)
 
 
 # ----------------------------------------------------------------------

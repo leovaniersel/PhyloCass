@@ -1,0 +1,11 @@
+# Three trees that agree d and e are sisters but each put a somewhere else.
+#
+# Their clusters fit a level-2 network with two reticulations -- but that
+# network does not display the three trees, only their clusters. Requiring the
+# trees themselves costs a third reticulation:
+#
+#   phylocass examples/three_trees.newick                   level 2, 2 reticulations
+#   phylocass examples/three_trees.newick --display-trees   level 3, 3 reticulations
+(((a,b),c),(d,e));
+(((a,c),b),(d,e));
+(((a,d),b),(c,e));

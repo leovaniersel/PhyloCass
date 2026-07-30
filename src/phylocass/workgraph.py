@@ -160,12 +160,16 @@ class WorkGraph:
     # ------------------------------------------------------------------
     # softwired clusters
     # ------------------------------------------------------------------
-    def softwired_clusters(self) -> set[frozenset]:
-        """Every cluster this network represents in the softwired sense.
+    def switching_cluster_sets(self) -> list[set[frozenset]]:
+        """The clusters of each switching separately, one set per switching.
 
-        A cluster is represented if *some* switching -- one incoming edge kept
-        per reticulation -- leaves a node whose descendant taxa are exactly
-        that cluster.  Different clusters may use different switchings.
+        A *switching* keeps one incoming edge per reticulation; what is left is
+        a tree, and its clusters are the descendant taxon sets of its nodes.
+
+        Keeping the switchings apart is what distinguishes the two acceptance
+        tests: :meth:`represents` asks whether every cluster appears in *some*
+        switching, :meth:`displays` whether each tree's clusters all appear in
+        *one and the same* switching.
 
         This is computed here rather than through PhyloZoo's ``displayed_trees``
         because mid-search graphs are not valid ``DirectedPhyNetwork``s, and
@@ -176,14 +180,14 @@ class WorkGraph:
         try:
             order = self.topological_order(children, parents)
         except ValueError:
-            return set()
+            return []
         roots = [v for v in children if not parents[v]]
         if len(roots) != 1:
-            return set()
+            return []
         root = roots[0]
 
         reticulations = [v for v in order if len(parents[v]) >= 2]
-        found: set[frozenset] = set()
+        per_switching: list[set[frozenset]] = []
 
         for choice in product(*(parents[r] for r in reticulations)):
             on = dict(zip(reticulations, choice))
@@ -197,6 +201,7 @@ class WorkGraph:
                         continue
                     reachable.add(w)
 
+            found: set[frozenset] = set()
             below: dict[int, frozenset] = {}
             for v in reversed(order):
                 if v not in reachable:
@@ -210,13 +215,46 @@ class WorkGraph:
                 below[v] = acc
                 if acc:
                     found.add(acc)
-        return found
+            per_switching.append(found)
+        return per_switching
+
+    def softwired_clusters(self) -> set[frozenset]:
+        """Every cluster this network represents in the softwired sense.
+
+        A cluster is represented if it appears in some switching; different
+        clusters may use different switchings.
+        """
+        out: set[frozenset] = set()
+        for found in self.switching_cluster_sets():
+            out |= found
+        return out
 
     def represents(self, clusters: Iterable[frozenset]) -> bool:
+        """Is every cluster represented, each free to use its own switching?"""
         wanted = {c for c in clusters if c}
         if not wanted:
             return True
         return wanted <= self.softwired_clusters()
+
+    def displays(self, tree_clusters: Iterable[Iterable[frozenset]]) -> bool:
+        """Does one switching account for the whole of each input tree?
+
+        ``tree_clusters`` gives the clusters of each input tree separately.
+        For every tree there must be a *single* switching containing all of its
+        clusters -- then that switching's tree displays the input tree, so the
+        network displays the trees themselves and not merely their clusters.
+
+        Different trees may of course use different switchings; that is exactly
+        what the reticulations are for.
+        """
+        wanted_per_tree = [{c for c in want if c} for want in tree_clusters]
+        wanted_per_tree = [w for w in wanted_per_tree if w]
+        if not wanted_per_tree:
+            return True
+        per_switching = self.switching_cluster_sets()
+        return all(
+            any(want <= found for found in per_switching) for want in wanted_per_tree
+        )
 
     # ------------------------------------------------------------------
     # structure, via PhyloZoo

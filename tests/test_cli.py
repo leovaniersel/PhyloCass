@@ -87,6 +87,29 @@ class TestBadInput:
         assert "Traceback" not in proc.stderr
 
 
+class TestDisplayTrees:
+    THREE = "(((a,b),c),(d,e)); (((a,c),b),(d,e)); (((a,d),b),(c,e));"
+
+    def test_flag_changes_the_answer(self):
+        plain = run(["-"], stdin=self.THREE)
+        display = run(["--display-trees", "-"], stdin=self.THREE)
+        assert plain.returncode == 0 and display.returncode == 0
+        assert "displays-trees=False" in plain.stderr
+        assert "displays-trees=True" in display.stderr
+
+    def test_summary_reports_the_display_check(self):
+        proc = run([str(EXAMPLES / "conflicting_trees.newick")])
+        assert "displays-trees=" in proc.stderr
+
+    def test_rejected_for_cluster_input(self):
+        proc = run(
+            ["--display-trees", "--format", "clusters", str(EXAMPLES / "figure1_clusters.txt")]
+        )
+        assert proc.returncode == 2
+        assert "needs tree input" in proc.stderr
+        assert "Traceback" not in proc.stderr
+
+
 class TestBomOnStdin:
     """PowerShell 5.1 prepends a UTF-8 BOM when piping into a program."""
 
