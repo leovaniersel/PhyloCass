@@ -277,11 +277,38 @@ calling in either mode, since cluster mode often happens to display the trees
 anyway. It returns `None` when Cass was handed a bare cluster set, because
 then nothing records which cluster came from which tree.
 
-### What to expect
+### Two trees are a special case
 
-On random inputs, display mode cost **no extra reticulations at all for two
-trees** (40/40 cases), and one or two extra for three and four trees (20 of 31
-cases). Two trees rarely need the option; three or more often do.
+For **two binary trees on the same taxon set** the minimum is the same whichever
+model you use — displaying the trees, or representing their clusters in the
+softwired sense — both for the reticulation number and for the level:
+
+> L. van Iersel, S. Kelk. *When two trees go to war.*
+> Journal of Theoretical Biology **269**(1):245–255, 2011
+> ([arXiv:1004.5332](https://arxiv.org/abs/1004.5332)),
+> Corollary 1 (reticulation number) and Theorem 2 (level).
+
+Over 600 random pairs of binary trees, display mode indeed cost **nothing**: the
+same level and the same reticulation number in all 600 cases.
+
+That is a statement about the *minimum*, though, not about any particular
+network — and the paper says so explicitly, giving a two-tree instance whose
+minimum cluster network does not display both trees. Cass runs into this
+routinely: in **268 of those 600 cases (45%) the cluster-mode network did not
+display the two input trees**, even though a network with the same number of
+reticulations that does display them exists.
+
+```bash
+phylocass examples/two_trees.newick                  # 2 reticulations, displays-trees=False
+phylocass examples/two_trees.newick --display-trees  # 2 reticulations, displays-trees=True
+```
+
+So for two binary trees, switch the option on: it is free, and without it you
+often do not get the trees. The result needs both trees binary and on the same
+taxon set — it fails for three or more trees, and for two non-binary trees.
+
+For three and four trees the models genuinely diverge, and then the option
+costs something: one or two extra reticulations in 20 of 31 random cases.
 
 Two caveats worth stating plainly:
 

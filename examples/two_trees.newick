@@ -1,0 +1,14 @@
+# Two binary trees on five taxa.
+#
+# Both modes return a level-2 network with two reticulations -- van Iersel &
+# Kelk (2011) prove the minimum is the same for the tree and softwired-cluster
+# models when the input is two binary trees on the same taxon set.
+#
+# But the minimum is all that coincides. Cluster mode's network happens not to
+# display these two trees, only their clusters; display mode's does, for the
+# same two reticulations:
+#
+#   phylocass examples/two_trees.newick                   displays-trees=False
+#   phylocass examples/two_trees.newick --display-trees   displays-trees=True
+((a,e),(c,(b,d)));
+(d,(b,(c,(a,e))));

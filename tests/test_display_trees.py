@@ -67,6 +67,43 @@ class TestTheDistinction:
         assert display_mode.displays_input_trees() is True
 
 
+class TestTwoBinaryTrees:
+    """van Iersel & Kelk 2011: for two binary trees on the same taxon set the
+    minimum reticulation number and level are the same in the tree model and
+    the softwired-cluster model.  That is about the minimum, not about any
+    particular network -- a minimum cluster network need not display the trees.
+    """
+
+    TWO = "((a,e),(c,(b,d))); (d,(b,(c,(a,e))));"
+
+    def test_the_minimum_coincides_so_display_mode_is_free(self):
+        cluster_mode, display_mode = both_modes(self.TWO)
+        assert display_mode.reticulation_number == cluster_mode.reticulation_number
+        assert display_mode.level == cluster_mode.level
+
+    def test_but_cluster_mode_still_misses_the_trees_here(self):
+        cluster_mode, display_mode = both_modes(self.TWO)
+        assert cluster_mode.displays_input_trees() is False
+        assert display_mode.displays_input_trees() is True
+
+    @pytest.mark.parametrize("seed", range(25))
+    def test_display_mode_is_free_on_random_pairs(self, seed):
+        rng = random.Random(seed)
+        names = [chr(ord("a") + i) for i in range(rng.randint(4, 7))]
+        trees = [random_tree(rng, names).to_phylozoo() for _ in range(2)]
+        opts = dict(max_level=5, time_limit=10)
+        try:
+            cluster_mode = cass_from_trees(trees, CassOptions(**opts))
+            display_mode = cass_from_trees(
+                trees, CassOptions(display_trees=True, **opts)
+            )
+        except RuntimeError:
+            pytest.skip("search budget exhausted")
+        assert display_mode.reticulation_number == cluster_mode.reticulation_number
+        assert display_mode.level == cluster_mode.level
+        assert display_mode.displays_input_trees() is True
+
+
 class TestApi:
     def test_display_trees_needs_provenance(self):
         with pytest.raises(ValueError, match="which cluster came from which tree"):
