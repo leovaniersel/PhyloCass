@@ -10,3 +10,8 @@ venv/
 htmlcov/
 .idea/
 .vscode/
+
+# stray outputs from running the examples
+/network.png
+/network.enewick
+/*.dot
