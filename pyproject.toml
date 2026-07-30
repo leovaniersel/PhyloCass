@@ -1,32 +1,58 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "phylocass"
-version = "0.2.0"
+version = "0.3.0"
 description = "The Cass algorithm on PhyloZoo: rooted phylogenetic networks of low level from conflicting clusters"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "Leo van Iersel" }]
-keywords = ["phylogenetics", "phylogenetic networks", "clusters", "reticulation", "level-k"]
+maintainers = [{ name = "Leo van Iersel" }]
+keywords = [
+  "phylogenetics",
+  "phylogenetic networks",
+  "clusters",
+  "reticulation",
+  "level-k",
+  "hybridization number",
+  "supernetwork",
+  "bioinformatics",
+]
 classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Topic :: Scientific/Engineering :: Bio-Informatics",
-  "License :: OSI Approved :: MIT License",
+  "Typing :: Typed",
 ]
 dependencies = ["phylozoo>=0.2.6"]
 
 [project.optional-dependencies]
 viz = ["phylozoo[viz]>=0.2.6"]
-dev = ["pytest>=7", "phylozoo[viz]>=0.2.6"]
+dev = ["pytest>=7", "phylozoo[viz]>=0.2.6", "build>=1", "twine>=5"]
+
+[project.urls]
+Homepage = "https://github.com/leovaniersel/PhyloCass"
+Repository = "https://github.com/leovaniersel/PhyloCass"
+Issues = "https://github.com/leovaniersel/PhyloCass/issues"
 
 [project.scripts]
 phylocass = "phylocass.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+phylocass = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

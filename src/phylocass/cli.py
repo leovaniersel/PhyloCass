@@ -8,10 +8,20 @@ from pathlib import Path
 
 from phylozoo.utils.exceptions.base import PhyloZooError
 
+from . import __version__
 from .cass import CassOptions, cass, cass_from_trees
 from .io import read_cluster_file, read_trees
 
 __all__ = ["main"]
+
+
+def _phylozoo_version() -> str:
+    try:
+        import phylozoo
+
+        return getattr(phylozoo, "__version__", "?")
+    except Exception:  # pragma: no cover - phylozoo is a hard dependency
+        return "not installed"
 
 
 def _read_stdin() -> str:
@@ -39,6 +49,11 @@ def build_parser() -> argparse.ArgumentParser:
             "Build a rooted phylogenetic network of minimum level representing "
             "all clusters of a set of rooted trees (the Cass algorithm)."
         ),
+    )
+    p.add_argument(
+        "--version",
+        action="version",
+        version=f"phylocass {__version__} (phylozoo {_phylozoo_version()})",
     )
     p.add_argument("input", nargs="?", default="-", help="input file, or '-' for stdin")
     p.add_argument(

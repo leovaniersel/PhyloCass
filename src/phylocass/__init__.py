@@ -50,7 +50,7 @@ from .treebuild import build_tree
 from .workgraph import WorkGraph
 from .zclosure import PartialCluster, ZClosureResult, partial_clusters, z_closure
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "CassOptions",

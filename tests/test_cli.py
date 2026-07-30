@@ -22,6 +22,23 @@ def run(args, stdin=None):
     )
 
 
+class TestVersion:
+    def test_version_flag(self):
+        from phylocass import __version__
+
+        proc = run(["--version"])
+        assert proc.returncode == 0
+        assert __version__ in proc.stdout
+        assert "phylozoo" in proc.stdout
+
+    def test_package_metadata_matches_dunder_version(self):
+        from importlib.metadata import version
+
+        from phylocass import __version__
+
+        assert version("phylocass") == __version__
+
+
 class TestNormalUse:
     def test_newick_file(self):
         proc = run([str(EXAMPLES / "conflicting_trees.newick")])

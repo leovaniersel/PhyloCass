@@ -23,14 +23,25 @@ displayed trees, quartets, and so on.
 ## Install
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\Activate.ps1
-pip install -e ".[viz]"            # or just ".[dev]" / "." without plotting
+pip install phylocass            # core
+pip install "phylocass[viz]"     # with plotting
 ```
 
 Pulls in `phylozoo>=0.2.6`. Python 3.10+. Installing puts a `phylocass`
-command on your path (inside the environment); `python -m phylocass` does the
-same thing if you would rather not activate anything.
+command on your path; `python -m phylocass` does the same thing.
+
+From a checkout instead, for development:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+```
+
+> **Not on PyPI yet.** The package builds and installs cleanly, but publishing
+> would make the source public and this repository is private — see
+> [RELEASING.md](RELEASING.md). Until then, install from the repository:
+> `pip install git+ssh://git@github.com/leovaniersel/PhyloCass.git`
 
 <details>
 <summary>Windows: "running scripts is disabled on this system"</summary>
