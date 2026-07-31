@@ -539,7 +539,10 @@ Median seconds:
 | 120 | 13.5 | 182 | | |
 
 Every completed run returned a network of level ≤ *k* representing every input
-cluster. A blank is untested, not a failure.
+cluster. A blank is untested, not a failure. Levels 1–2 and the 30-taxa-and-up
+part of level 3 are medians of three samples at a 300 s budget; the 10- and
+20-taxa entries for levels 3 and 4 are medians of five samples at 60 s, from a
+second run that went after the small sizes specifically.
 
 **Medians hide a long tail.** Occasional instances take a hundred times the
 median: at level 3 on 10 taxa the median is 0.24 s and the slowest of five
@@ -549,21 +552,30 @@ samples hit the 60 s cap; at level 4 on 12 taxa, 0.40 s against 41 s. Set a
 Now the realistic one: a tree of blobs, i.e. many small conflicts scattered
 across the taxa rather than one enormous tangle.
 
-| taxa | reticulations | blobs | largest component | level ≤2 | level ≤3 |
-| ---: | ---: | ---: | ---: | ---: | ---: |
-| 100 | 53 | 36 | 4 blocks | 0.06 s | 0.10 s |
-| 200 | 99 | 67 | 4 blocks | 0.12 s | 0.36 s |
-| 400 | 207 | 132 | 4 blocks | 0.78 s | 0.44 s |
-| 800 | 385 | 255 | 4 blocks | 0.98 s | 1.34 s |
+With blobs of up to level 3, the hardest of the three runs:
+
+| taxa | reticulations | blobs | largest component | median |
+| ---: | ---: | ---: | ---: | ---: |
+| 100 | 61 | 32 | 4 blocks | 0.10 s |
+| 200 | 132 | 69 | 4 blocks | 0.36 s |
+| 400 | 271 | 132 | 4 blocks | 0.44 s |
+| 800 | 543 | 275 | 4 blocks | 1.34 s |
 
 **800 taxa with 543 reticulations in 1.3 s.** The component never exceeds four
 blocks however large the dataset gets, because collapsing removes everything
 that is not in genuine conflict.
 
+Capping the blobs at level 1 or 2 instead gives fewer reticulations and slightly
+lower times — 800 taxa comes to 267 reticulations in 0.88 s and 385 in 0.98 s.
+The taxon count barely matters in any of the three; the component size is what
+does, and it stays at four blocks throughout.
+
 So, as a rule of thumb:
 
 - **conflicts local** (each disagreement involves a handful of taxa) — hundreds
-  of taxa are fine, at any level;
+  of taxa are fine; measured with blobs up to level 3, and the level of an
+  individual blob barely shows, because what the search sees is a component of
+  a few blocks either way;
 - **one big conflict, level 1** — 120 taxa in 13 s, and still climbing slowly;
 - **one big conflict, level 2** — comfortable to around 100 taxa, minutes at 120;
 - **one big conflict, level 3** — around 50 taxa;
