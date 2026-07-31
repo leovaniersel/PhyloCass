@@ -20,7 +20,9 @@ __all__ = [
     "read_cluster_file",
     "hardwired_clusters",
     "softwired_clusters",
+    "softwired_clusters_via_displayed_trees",
     "displays_trees",
+    "displays_trees_via_displayed_trees",
     "displays_partial_trees",
     "clusters_of_trees",
     "per_tree_clusters",
@@ -107,10 +109,30 @@ def hardwired_clusters(network: DirectedPhyNetwork) -> set[frozenset]:
 
 
 def softwired_clusters(network: DirectedPhyNetwork) -> set[frozenset]:
-    """Every cluster ``network`` represents, via PhyloZoo's displayed trees.
+    """Every cluster ``network`` represents in the softwired sense.
 
-    Slower than the search's internal routine but entirely independent of it,
-    which makes it useful for verifying finished networks.
+    Computed blob by blob (see
+    :meth:`phylocass.workgraph.WorkGraph.softwired_clusters`), which costs a
+    sum of ``2 ** (reticulations in one blob)`` instead of
+    ``2 ** (total reticulations)``. On a network whose conflicts are local that
+    is the difference between instant and hopeless.
+
+    :func:`softwired_clusters_via_displayed_trees` is the same thing computed
+    the obvious way; the tests check the two agree.
+    """
+    from .workgraph import WorkGraph
+
+    return WorkGraph.from_phylozoo(network).softwired_clusters()
+
+
+def softwired_clusters_via_displayed_trees(
+    network: DirectedPhyNetwork,
+) -> set[frozenset]:
+    """Softwired clusters straight from PhyloZoo's ``displayed_trees``.
+
+    Exponential in the *total* number of reticulations, so unusable on large
+    networks -- but it goes through PhyloZoo rather than any of PhyloCass's own
+    machinery, which makes it the reference the fast version is checked against.
     """
     found: set[frozenset] = set()
     for tree in displayed_trees(network):
@@ -137,11 +159,28 @@ def per_tree_clusters(
 def displays_trees(
     network: DirectedPhyNetwork, tree_clusters: Iterable[Iterable[frozenset]]
 ) -> bool:
-    """Does ``network`` display each tree, checked through PhyloZoo?
+    """Does ``network`` display each tree, not merely its clusters?
 
-    For every tree there must be one displayed tree whose clusters include all
-    of it.  Uses PhyloZoo's ``displayed_trees``, so it is independent of the
-    search's own machinery.
+    For every tree there must be a single switching whose clusters include all
+    of it.  Decided blob by blob (see
+    :meth:`phylocass.workgraph.WorkGraph.displays`) rather than by enumerating
+    every displayed tree.
+
+    :func:`displays_trees_via_displayed_trees` is the same question answered
+    the obvious way; the tests check the two agree.
+    """
+    from .workgraph import WorkGraph
+
+    return WorkGraph.from_phylozoo(network).displays(tree_clusters)
+
+
+def displays_trees_via_displayed_trees(
+    network: DirectedPhyNetwork, tree_clusters: Iterable[Iterable[frozenset]]
+) -> bool:
+    """As :func:`displays_trees`, straight from PhyloZoo's ``displayed_trees``.
+
+    Exponential in the total number of reticulations; kept as the reference the
+    fast version is checked against.
     """
     wanted = [{c for c in want if c} for want in tree_clusters]
     wanted = [w for w in wanted if w]

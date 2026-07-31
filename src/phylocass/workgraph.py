@@ -85,6 +85,25 @@ class WorkGraph:
         self.add_edge(w, v)
         return w
 
+    @classmethod
+    def from_phylozoo(cls, network: DirectedPhyNetwork) -> "WorkGraph":
+        """Wrap a PhyloZoo network so the blob-wise machinery applies to it.
+
+        Each taxon becomes a one-element block, which is what the rest of this
+        class expects.
+        """
+        work = cls()
+        mapping = {}
+        for v in network.nodes:
+            label = network.get_label(v)
+            is_leaf = not any(True for _ in network.children(v))
+            mapping[v] = work.new_node(
+                block=frozenset({label}) if (is_leaf and label is not None) else None
+            )
+        for u, v in network.edges:
+            work.add_edge(mapping[u], mapping[v])
+        return work
+
     def copy(self) -> "WorkGraph":
         other = WorkGraph.__new__(WorkGraph)
         other.g = self.g.copy()
@@ -218,16 +237,129 @@ class WorkGraph:
             per_switching.append(found)
         return per_switching
 
+    def blobs(self) -> list[set[int]]:
+        """Node sets of the biconnected components that contain a reticulation."""
+        edges = self.edges()
+        out = []
+        for comp in biconnected_components(self.g):
+            inside = sum(1 for u, v in edges if u in comp and v in comp)
+            if inside - len(comp) + 1 > 0:
+                out.append(set(comp))
+        return out
+
     def softwired_clusters(self) -> set[frozenset]:
         """Every cluster this network represents in the softwired sense.
 
         A cluster is represented if it appears in some switching; different
         clusters may use different switchings.
+
+        Computed blob by blob rather than by enumerating all switchings at
+        once. Switchings in different biconnected components are independent,
+        and -- the fact that makes this work -- the taxa below the head of a
+        cut-edge are the *same* under every switching: both parents of any
+        reticulation down there lie in that same blob, so no switching can cut
+        it off. So a node's descendant set varies only with the switching of
+        the one blob containing it, and the union over all switchings is the
+        union over each blob's switchings taken separately.
+
+        That turns ``2 ** (total reticulations)`` into a sum of
+        ``2 ** (reticulations in one blob)``, which is what makes a network
+        with many small conflicts tractable.
         """
-        out: set[frozenset] = set()
-        for found in self.switching_cluster_sets():
-            out |= found
-        return out
+        fixed, per_blob = self.blob_cluster_sets()
+        found = set(fixed)
+        for sets in per_blob:
+            for one in sets:
+                found |= one
+        return found
+
+    def blob_cluster_sets(self) -> tuple[set[frozenset], list[list[set[frozenset]]]]:
+        """Clusters split into the switching-invariant ones and per-blob ones.
+
+        Returns ``(fixed, per_blob)`` where ``fixed`` holds the clusters present
+        under every switching, and ``per_blob[i]`` lists one cluster set per
+        switching of blob ``i``.
+
+        This is the decomposition both :meth:`softwired_clusters` and
+        :meth:`displays` are built on.
+        """
+        children, parents = self.adjacency()
+        try:
+            order = self.topological_order(children, parents)
+        except ValueError:
+            return set(), []
+        if len([v for v in children if not parents[v]]) != 1:
+            return set(), []
+
+        # descendant taxa ignoring switchings; correct as-is for every node
+        # outside a blob, and the value to use for anything hanging below one
+        reach: dict[int, frozenset] = {}
+        for v in reversed(order):
+            acc = self.block.get(v, DUMMY)
+            for w in children[v]:
+                acc = acc | reach[w]
+            reach[v] = acc
+
+        blob_list = self.blobs()
+        in_blob: dict[int, int] = {}
+        for index, nodes in enumerate(blob_list):
+            for v in nodes:
+                in_blob[v] = index
+
+        # A node's descendant set is switching-invariant exactly when it heads a
+        # cut-edge (or is the root): no switching can detach anything below it.
+        # That includes the *top of each blob*, which the enclosing blob can
+        # also produce -- by switching all its other children off -- so leaving
+        # those out would let one cluster belong to two blobs and break the
+        # independence :meth:`displays` relies on.
+        invariant = {v for _, v in cut_edges(self.g)}
+        invariant.add(order[0])
+        fixed = {reach[v] for v in invariant if reach[v]}
+        per_blob = [
+            self._blob_clusters(nodes, index, in_blob, children, order, reach)
+            for index, nodes in enumerate(blob_list)
+        ]
+        return fixed, per_blob
+
+    def _blob_clusters(
+        self, nodes, index, in_blob, children, order, reach
+    ) -> list[set[frozenset]]:
+        """One cluster set per switching of this blob."""
+        inside_children = {
+            v: [w for w in children[v] if in_blob.get(w) == index] for v in nodes
+        }
+        # everything hanging off the blob is switching-invariant
+        pendant = {
+            v: frozenset().union(
+                self.block.get(v, DUMMY),
+                *(reach[w] for w in children[v] if in_blob.get(w) != index),
+            )
+            for v in nodes
+        }
+
+        inside_parents: dict[int, list[int]] = {v: [] for v in nodes}
+        for v in nodes:
+            for w in inside_children[v]:
+                inside_parents[w].append(v)
+        reticulations = [v for v in nodes if len(inside_parents[v]) >= 2]
+        local_order = [v for v in order if v in nodes]
+
+        per_switching: list[set[frozenset]] = []
+        for choice in product(*(inside_parents[r] for r in reticulations)):
+            on = dict(zip(reticulations, choice))
+            found: set[frozenset] = set()
+            below: dict[int, frozenset] = {}
+            for v in reversed(local_order):
+                acc = pendant[v]
+                for w in inside_children[v]:
+                    if len(inside_parents[w]) >= 2 and on.get(w) != v:
+                        continue
+                    acc = acc | below[w]
+                below[v] = acc
+                if acc:
+                    found.add(acc)
+            per_switching.append(found)
+        return per_switching
 
     def represents(self, clusters: Iterable[frozenset]) -> bool:
         """Is every cluster represented, each free to use its own switching?"""
@@ -246,15 +378,35 @@ class WorkGraph:
 
         Different trees may of course use different switchings; that is exactly
         what the reticulations are for.
+
+        Decided blob by blob, like :meth:`softwired_clusters`, which needs one
+        extra fact: a cluster that is *not* switching-invariant is produced by
+        exactly one blob. A node above a blob reaches either all of that blob's
+        taxa or none of them -- the taxa below a cut-edge are fixed -- so it can
+        never produce a proper subset of them, and blobs that are side by side
+        span disjoint taxa. So each such cluster can be attributed to one blob,
+        and the blobs can then be satisfied independently.
         """
         wanted_per_tree = [{c for c in want if c} for want in tree_clusters]
         wanted_per_tree = [w for w in wanted_per_tree if w]
         if not wanted_per_tree:
             return True
-        per_switching = self.switching_cluster_sets()
-        return all(
-            any(want <= found for found in per_switching) for want in wanted_per_tree
-        )
+
+        fixed, per_blob = self.blob_cluster_sets()
+        reachable = [set().union(*sets) if sets else set() for sets in per_blob]
+        anywhere = set().union(*reachable) if reachable else set()
+
+        for want in wanted_per_tree:
+            outstanding = want - fixed
+            if not outstanding:
+                continue
+            if not outstanding <= anywhere:
+                return False
+            for sets, whole in zip(per_blob, reachable):
+                needed = outstanding & whole
+                if needed and not any(needed <= one for one in sets):
+                    return False
+        return True
 
     # ------------------------------------------------------------------
     # structure, via PhyloZoo

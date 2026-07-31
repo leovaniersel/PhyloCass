@@ -543,6 +543,33 @@ holding the reticulation count near ten while the taxa grow:
 Sixteen times the taxa for six times the time, because each blob collapses to a
 component of at most four blocks no matter how large the dataset is.
 
+### Verification scales too
+
+Checking a *finished* network — `represents_input()`, `displays_input_trees()` —
+means asking which clusters it displays, and the obvious way to do that
+enumerates one tree per switching, so `2 ** (total reticulations)`. That is
+fine for a handful of reticulations and hopeless past twenty.
+
+PhyloCass does it one biconnected component at a time instead. Switchings in
+different blobs are independent, and the taxa below a cut-edge are the same
+under *every* switching — both parents of any reticulation down there lie in
+that same blob, so nothing can cut it off. A node's descendant set therefore
+varies only with its own blob's switching, and the cost becomes a sum of
+`2 ** (reticulations in one blob)`:
+
+| taxa | reticulations | blobs | blob-wise | trees the naive way needs |
+| ---: | ---: | ---: | ---: | ---: |
+| 20 | 14 | 8 | 0.002 s | 16,384 |
+| 80 | 37 | 24 | 0.005 s | 1.4 × 10¹¹ |
+| 160 | 78 | 51 | 0.013 s | 3.0 × 10²³ |
+| 320 | 155 | 104 | 0.033 s | 4.6 × 10⁴⁶ |
+
+`displays_input_trees()` decomposes the same way, which needs one more fact:
+a cluster that is *not* switching-invariant belongs to exactly one blob, so the
+blobs can be satisfied independently. `softwired_clusters_via_displayed_trees`
+and `displays_trees_via_displayed_trees` are the naive versions, kept as the
+references the fast ones are tested against.
+
 The exponent does bite when the *conflict* is large rather than the dataset:
 level 4 on 6–7 mutually conflicting taxa takes seconds to tens of seconds, and
 that is inherent rather than an implementation problem.
@@ -582,7 +609,10 @@ Four kinds of test carry the weight:
   network's level.
 - **Agreement with PhyloZoo.** The search's own softwired-cluster and level
   routines are checked against PhyloZoo's `displayed_trees` and `level` on
-  random networks, and every finished network must pass `validate()`.
+  random networks, and every finished network must pass `validate()`. The
+  blob-wise shortcut described under *Performance* is pinned the same way:
+  1481 random networks agreed on their cluster sets, and 9937 display queries
+  over 1157 networks agreed exactly, with no mismatches either way.
 - **The paper's example.** The nine-taxon cluster set from Figure 1 reproduces
   the level-2, two-reticulation network the paper reports, where the
   galled-network algorithm needs four reticulations.
