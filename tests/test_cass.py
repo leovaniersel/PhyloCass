@@ -172,6 +172,55 @@ def test_roundtrip_level_two(seed):
     assert r.level <= 2, f"level {r.level} for clusters from a level-2 network"
 
 
+@pytest.mark.parametrize("seed", range(12))
+def test_roundtrip_level_two_at_twenty_leaves(seed):
+    """The guarantee should not care how many taxa there are, only how many conflict.
+
+    Collapsing unseparated sets shrinks a 20-leaf instance to a component of
+    roughly a dozen blocks, so this runs in well under a second despite the
+    size.
+    """
+    rng = random.Random(40000 + seed)
+    work = random_network(rng, 18, 2)
+    if work.level() != 2 or len(work.taxa()) != 20:
+        pytest.skip("random network degenerated")
+    taxa = work.taxa()
+    clusters = nontrivial(work.softwired_clusters(), taxa)
+    r = cass(clusters, taxa, CassOptions(max_level=4, time_limit=60))
+    assert r.represents_input()
+    assert r.level <= 2, f"level {r.level} for clusters from a level-2 network"
+    assert frozenset(r.network.taxa) == taxa
+    r.network.validate()
+
+
+@pytest.mark.parametrize("seed", range(6))
+def test_display_mode_at_twenty_leaves(seed):
+    """Feeding a sampled network's own displayed trees back in should cost no more."""
+    from phylozoo.core.network.dnetwork.derivations import displayed_trees
+
+    rng = random.Random(50000 + seed)
+    work = random_network(rng, 18, 2)
+    if work.level() != 2 or len(work.taxa()) != 20:
+        pytest.skip("random network degenerated")
+
+    seen, trees = set(), []
+    for tree in displayed_trees(work.to_phylozoo()):
+        key = frozenset(hardwired_clusters(tree))
+        if key not in seen:
+            seen.add(key)
+            trees.append(tree)
+    if len(trees) < 2:
+        pytest.skip("network displays only one distinct tree")
+
+    r = cass_from_trees(
+        trees, CassOptions(max_level=4, time_limit=60, display_trees=True)
+    )
+    assert r.displays_input_trees() is True
+    # the sampled network displays them with two reticulations, so two is optimal
+    assert r.reticulation_number <= 2
+    r.network.validate()
+
+
 @pytest.mark.parametrize("seed", range(30))
 def test_random_trees_always_produce_a_valid_network(seed):
     """Whatever the input trees, the output must display every input cluster."""

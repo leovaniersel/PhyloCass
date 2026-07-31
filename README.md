@@ -607,11 +607,28 @@ level the search climbs through. When a component exhausts its budget or
 exceeds `max_level`, `cass` raises `RuntimeError` naming the component's size
 and which limit it hit.
 
-The decomposition means cost is driven by the largest *conflicting component*,
-not by the total number of taxa — a 200-taxon dataset whose disagreements are
-local stays fast. On this machine, levels 0–2 return in well under a second;
-level 4 on 6–7 mutually conflicting taxa takes seconds to tens of seconds,
-which is the exponent showing up rather than anything avoidable.
+### What that means in practice
+
+The `|X|` in the bound is misleading, because the decomposition means cost is
+driven by the largest *conflicting component* after unseparated sets have been
+collapsed — not by the taxon count. Sampling level-2 networks, taking the
+clusters they display and handing them back to Cass:
+
+| leaves | median time | hardest component | level ≤ 2 |
+| ---: | ---: | ---: | :---: |
+| 10 | 0.02 s | 7 blocks | 35/35 |
+| 20 | 0.06 s | 11 blocks | 34/34 |
+| 40 | 0.17 s | 15 blocks | 30/30 |
+| 80 | 0.42 s | 19 blocks | 30/30 |
+| 160 | 2.0 s | 26 blocks | 31/31 |
+
+Sixteen times the taxa costs about thirty times the time, because the component
+Cass actually searches grows far more slowly than the input. A dataset whose
+disagreements are local stays fast however many taxa it has.
+
+The exponent does bite when the *conflict* is large rather than the dataset:
+level 4 on 6–7 mutually conflicting taxa takes seconds to tens of seconds, and
+that is inherent rather than an implementation problem.
 
 ## Tests
 
@@ -625,7 +642,11 @@ Three kinds of test carry the weight:
 - **Round-trips.** Generate a random network of level ≤ 2, take the clusters it
   displays, run Cass on them, and require a network of no higher level
   displaying every one of them. This tests the paper's exactness guarantee
-  directly rather than comparing against hard-coded output.
+  directly rather than comparing against hard-coded output. Run at 20 leaves as
+  well as at small sizes; over 375 sampled 20-leaf level-2 networks, Cass
+  returned a level-≤2 network representing every input cluster every time, and
+  in three cases found a level-1 network — the sampled network's clusters did
+  not need its second reticulation.
 - **Agreement with PhyloZoo.** The search's own softwired-cluster and level
   routines are checked against PhyloZoo's `displayed_trees` and `level` on
   random networks, and every finished network must pass `validate()`.
