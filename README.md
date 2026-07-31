@@ -42,7 +42,6 @@ source .venv/bin/activate          # Windows: .venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
 ```
 
-
 <details>
 <summary>Windows: "running scripts is disabled on this system"</summary>
 
@@ -481,89 +480,7 @@ The paper conjectures Cass is optimal at every level and proves a decomposition
 theorem supporting that, but only levels 1 and 2 are settled.
 `CassOptions.max_level` (default 4) bounds how far the search climbs.
 
-## How it works
-
-Two halves, matching the paper.
-
-**Decomposition (Section 3, Steps 1–4)** — in [`cass.py`](src/phylocass/cass.py).
-The incompatibility graph `IG(C)` has the clusters as nodes and joins two
-clusters that overlap without nesting. Each non-trivial connected component
-becomes an independent subproblem: collapse the maximal unseparated subsets of
-its support, solve it, build the tree on everything left over, then splice each
-component's network into that tree at the LCA of its taxa. Theorem 1 of the
-paper is what makes this safe — if any level-*k* network exists, one respecting
-this decomposition exists.
-
-**Simple level-*k* networks (Section 4, Algorithm 1)** — also in `cass.py`, as
-`_SimpleSearch`. Loop over the taxa; for each, delete it from every cluster and
-collapse the maximal ST-sets of what remains. Do that *k* times and only two
-taxa are left. Then walk back out: decollapse each ST-set leaf into its strict
-subtree, and hang the removed taxon below a new reticulation fed by every
-possible pair of edges, keeping any network that represents the clusters at
-that level.
-
-Display mode changes exactly one thing in that picture: the acceptance test.
-Each cluster is tagged with the trees it came from, and that tag survives every
-step of the recursion — a cluster is removed, collapsed and projected in step
-with the tree it belongs to — so at the point where Cass asks "does this
-network represent the clusters?", it can instead ask "does one switching
-account for the whole of each tree?". Nothing else about the search changes.
-Within a component the requirement is restricted to the clusters that component
-holds; switchings in different biconnected components are independent, so one
-switching per component composes into a single global switching per tree, and
-clusters that sit on the backbone tree hold under every switching anyway.
-
-Two details from the paper that are easy to miss, and that PhyloCass
-implements:
-
-- a **dummy taxon** `d` is offered alongside the real taxa at every round, and
-  when `d` is the one removed the collapse step is deliberately skipped. This
-  is what lets Cass build reticulations of indegree 3: hang `d`, hang the real
-  taxon, delete `d`, and contract the edge left between the two reticulations.
-- every tree built at the base of the recursion gets a **dummy root** above its
-  real root, so a reticulation edge can also attach above the root. Both
-  dummies are stripped on output.
-
-## How PhyloZoo is used
-
-PhyloZoo supplies the graph layer, the structural analysis and all I/O.
-PhyloCass adds the cluster combinatorics, which PhyloZoo does not cover, and
-the search itself.
-
-| concern | comes from |
-| --- | --- |
-| (e)Newick and DOT parsing and writing | PhyloZoo `DirectedPhyNetwork` I/O |
-| drawing | PhyloZoo `viz.plot` (matplotlib) |
-| network validation | PhyloZoo `validate()` |
-| level, reticulation number | PhyloZoo `classifications` |
-| displayed trees (verification) | PhyloZoo `derivations.displayed_trees` |
-| biconnected components, cut-edges | PhyloZoo `d_multigraph.features` |
-| degree-2 suppression, parallel edges | PhyloZoo `d_multigraph.transformations` |
-| mutable graph engine | PhyloZoo `DirectedMultiGraph` |
-| partitions | PhyloZoo `Partition` |
-| clusters, compatibility, ST-sets, `Collapse` | PhyloCass [`clusters.py`](src/phylocass/clusters.py) |
-| the Cass search | PhyloCass [`cass.py`](src/phylocass/cass.py) |
-
-### Why there is a `WorkGraph`
-
-`DirectedPhyNetwork` is immutable and validates node degrees: internal nodes
-must be tree nodes (in-degree 1, out-degree ≥ 2) or hybrid nodes (in-degree ≥ 2,
-out-degree 1). **Every intermediate state of the Cass construction violates
-that** — subdividing an edge creates a degree-2 node, and the algorithm parks
-dummy leaves and a dummy root that only make sense mid-search.
-
-So the search runs on PhyloZoo's mutable `DirectedMultiGraph` primitive,
-wrapped as [`WorkGraph`](src/phylocass/workgraph.py), and a validated
-`DirectedPhyNetwork` is materialised only once a candidate has been cleaned up.
-That the hand-off succeeds is itself a check: if Cass produced something
-malformed, PhyloZoo rejects it.
-
-`WorkGraph` computes softwired clusters itself rather than calling
-`displayed_trees`, for two reasons: mid-search graphs are not valid networks,
-and it is the hot loop of the whole algorithm. The test suite pins that routine
-against `displayed_trees` on finished networks so the shortcut cannot drift.
-
-### Module map
+## Module map
 
 | file | contents |
 | --- | --- |
@@ -575,17 +492,6 @@ against `displayed_trees` on finished networks so the shortcut cannot drift.
 | [`zclosure.py`](src/phylocass/zclosure.py) | completing partial clusters from trees on differing taxon sets |
 | [`cass.py`](src/phylocass/cass.py) | the algorithm |
 | [`cli.py`](src/phylocass/cli.py) | command line |
-
-### A note on the representation
-
-Collapsing taxa into groups happens over and over in this algorithm. Rather
-than minting composite taxon names, PhyloCass keeps every cluster written in
-terms of the *original* taxa and tracks the current level of collapsing as a
-separate partition into **blocks** — a block being a `frozenset` of original
-taxa that currently acts as one taxon. Restriction, deletion and the
-"does this network represent C?" test then need no translation layer at all.
-Leaf blocks double as leaf labels; the empty block marks a dummy leaf, which
-therefore contributes nothing to any descendant set for free.
 
 ## Performance
 
@@ -637,7 +543,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-Three kinds of test carry the weight:
+Four kinds of test carry the weight:
 
 - **Round-trips.** Generate a random network of level ≤ 2, take the clusters it
   displays, run Cass on them, and require a network of no higher level
@@ -647,6 +553,15 @@ Three kinds of test carry the weight:
   returned a level-≤2 network representing every input cluster every time, and
   in three cases found a level-1 network — the sampled network's clusters did
   not need its second reticulation.
+
+  Worth knowing what the sampler covers: networks are built by hanging a fresh
+  leaf below each new reticulation, so nearly every reticulation sits directly
+  above a leaf, which is also the shape Cass's own construction produces.
+  Level-2 networks whose reticulations sit above whole subtrees are
+  under-represented and the four level-2 generators are not sampled uniformly.
+  The check stays sound either way — the sampled network itself witnesses that
+  a level-2 solution exists — but the coverage is narrower than the counts
+  suggest.
 - **Agreement with PhyloZoo.** The search's own softwired-cluster and level
   routines are checked against PhyloZoo's `displayed_trees` and `level` on
   random networks, and every finished network must pass `validate()`.
