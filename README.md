@@ -513,6 +513,67 @@ level the search climbs through. When a component exhausts its budget or
 exceeds `max_level`, `cass` raises `RuntimeError` naming the component's size
 and which limit it hit.
 
+### Which datasets is this usable on?
+
+The taxon count is almost irrelevant. What decides the running time is the
+**largest conflicting component** — the incompatibility-graph component that is
+left after unseparated sets have been collapsed — and its level.
+
+Two regimes, measured by sampling networks, taking the clusters they display
+and handing them back to Cass. First the pessimal one: a *simple* level-k
+network, where every taxon hangs off a single blob so nothing collapses and the
+component is the entire dataset.
+
+Median seconds:
+
+| taxa in one blob | level 1 | level 2 | level 3 | level 4 |
+| ---: | ---: | ---: | ---: | ---: |
+| 10 | 0.05 | 0.08 | 0.24 | 0.23 |
+| 20 | 0.21 | 0.80 | 1.6 | 8.8 |
+| 30 | 0.46 | 3.5 | 6.2 | |
+| 40 | 1.0 | 7.3 | 50 | |
+| 50 | 1.6 | 14 | 81 | |
+| 60 | 2.6 | 30 | *gave up* | |
+| 80 | 5.1 | 88 | | |
+| 100 | 7.7 | 108 | | |
+| 120 | 13.5 | 182 | | |
+
+Every completed run returned a network of level ≤ *k* representing every input
+cluster. A blank is untested, not a failure.
+
+**Medians hide a long tail.** Occasional instances take a hundred times the
+median: at level 3 on 10 taxa the median is 0.24 s and the slowest of five
+samples hit the 60 s cap; at level 4 on 12 taxa, 0.40 s against 41 s. Set a
+`time_limit` and treat the medians as typical, not as a bound.
+
+Now the realistic one: a tree of blobs, i.e. many small conflicts scattered
+across the taxa rather than one enormous tangle.
+
+| taxa | reticulations | blobs | largest component | level ≤2 | level ≤3 |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 100 | 53 | 36 | 4 blocks | 0.06 s | 0.10 s |
+| 200 | 99 | 67 | 4 blocks | 0.12 s | 0.36 s |
+| 400 | 207 | 132 | 4 blocks | 0.78 s | 0.44 s |
+| 800 | 385 | 255 | 4 blocks | 0.98 s | 1.34 s |
+
+**800 taxa with 543 reticulations in 1.3 s.** The component never exceeds four
+blocks however large the dataset gets, because collapsing removes everything
+that is not in genuine conflict.
+
+So, as a rule of thumb:
+
+- **conflicts local** (each disagreement involves a handful of taxa) — hundreds
+  of taxa are fine, at any level;
+- **one big conflict, level 1** — 120 taxa in 13 s, and still climbing slowly;
+- **one big conflict, level 2** — comfortable to around 100 taxa, minutes at 120;
+- **one big conflict, level 3** — around 50 taxa;
+- **one big conflict, level 4** — around 20 taxa.
+
+Note how much better level 1 does than its own bound: `O(|X|^5)` would have
+twelve times the taxa costing a quarter of a million times the time, and the
+measured factor is 270 — roughly `n^2.3`. The bound counts an exhaustive
+search, while Cass stops at the first network that works.
+
 ### What that means in practice
 
 The `|X|` in the bound is misleading, because the decomposition means cost is

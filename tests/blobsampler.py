@@ -48,6 +48,7 @@ __all__ = [
     "generator_catalogue",
     "min_leaves",
     "sample_blob",
+    "sample_simple_network",
     "random_blob_network",
 ]
 
@@ -109,6 +110,51 @@ def sample_blob(
         if pz_level(blob) != generator.level:
             continue
         return blob
+    return None
+
+
+def sample_simple_network(
+    rng: random.Random, level: int, n_taxa: int, names=None, attempts: int = 60
+) -> DirectedPhyNetwork | None:
+    """A *simple* level-k network: one blob carrying all ``n_taxa`` leaves.
+
+    This is the hard shape. A network built from a tree of blobs spreads its
+    taxa over many small components, each of which Cass disposes of instantly;
+    here every taxon hangs off the same blob, so nothing collapses away and the
+    search faces a conflicting component the size of the whole dataset.
+    """
+    from conftest import taxon_names
+
+    catalogue = generator_catalogue(level)
+    if not catalogue:
+        return None
+    names = list(names or taxon_names(n_taxa))
+
+    for _ in range(attempts):
+        generator = catalogue[rng.randrange(len(catalogue))]
+        hybrid_sides = [s for s in generator.sides if isinstance(s, HybridSide)]
+        edge_sides = [s for s in generator.sides if not isinstance(s, HybridSide)]
+        if n_taxa < max(2, len(hybrid_sides)) or not edge_sides:
+            continue
+
+        pool = list(names)
+        rng.shuffle(pool)
+        stream = iter(pool)
+        side_taxa = {side: [next(stream)] for side in hybrid_sides}
+        buckets: dict = {side: [] for side in edge_sides}
+        for _ in range(n_taxa - len(hybrid_sides)):
+            buckets[edge_sides[rng.randrange(len(edge_sides))]].append(next(stream))
+        side_taxa.update(buckets)
+
+        try:
+            net = attach_leaves_to_generator(generator, side_taxa)
+        except Exception:
+            continue
+        if len(list(net.edges)) != len(set(net.edges)):
+            continue
+        if pz_level(net) != level:
+            continue
+        return net
     return None
 
 

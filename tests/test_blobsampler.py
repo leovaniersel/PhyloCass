@@ -22,6 +22,7 @@ from blobsampler import (
     min_leaves,
     random_blob_network,
     sample_blob,
+    sample_simple_network,
 )
 
 
@@ -86,6 +87,51 @@ class TestSampleBlob:
     def test_too_few_leaves_is_refused(self):
         (generator,) = generator_catalogue(1)
         assert sample_blob(generator, 1, random.Random(0)) is None
+
+
+class TestSimpleNetworks:
+    """One blob carrying every taxon -- the shape that is actually hard."""
+
+    @pytest.mark.parametrize("level", [1, 2, 3])
+    @pytest.mark.parametrize("n_taxa", [5, 12])
+    def test_shape(self, level, n_taxa):
+        net = sample_simple_network(random.Random(level * 10 + n_taxa), level, n_taxa)
+        assert net is not None
+        assert len(net.taxa) == n_taxa
+        assert pz_level(net) == level
+        net.validate()
+
+    @pytest.mark.parametrize("level", [1, 2])
+    def test_nothing_collapses_so_the_component_is_the_whole_dataset(self, level):
+        """Contrast with the blob tree, whose components stay tiny."""
+        from phylocass.clusters import (
+            canonical,
+            maximal_unseparated_sets,
+            nontrivial_components,
+        )
+        from phylocass.io import softwired_clusters
+
+        net = sample_simple_network(random.Random(3), level, 12)
+        taxa = frozenset(net.taxa)
+        clusters = {c for c in softwired_clusters(net) if 1 < len(c) < len(taxa)}
+        biggest = 0
+        for comp in nontrivial_components(canonical(clusters)):
+            support = frozenset().union(*comp)
+            blocks = maximal_unseparated_sets(
+                comp, [frozenset({t}) for t in sorted(support, key=str)]
+            )
+            biggest = max(biggest, len(blocks))
+        assert biggest >= 10, "a simple network should barely collapse"
+
+    def test_round_trips_through_cass(self):
+        from phylocass.io import softwired_clusters
+
+        net = sample_simple_network(random.Random(0), 2, 12)
+        taxa = frozenset(net.taxa)
+        clusters = {c for c in softwired_clusters(net) if 1 < len(c) < len(taxa)}
+        r = cass(clusters, taxa, CassOptions(max_level=3, time_limit=120))
+        assert r.represents_input()
+        assert r.level <= 2
 
 
 class TestSampledNetworks:
