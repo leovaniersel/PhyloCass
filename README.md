@@ -1,5 +1,7 @@
 # PhyloCass
 
+<img src="https://raw.githubusercontent.com/leovaniersel/PhyloCass/main/docs/cass_icon.svg" alt="Cass" width="110" align="right">
+
 [![PyPI](https://img.shields.io/pypi/v/phylocass.svg)](https://pypi.org/project/phylocass/)
 [![Python versions](https://img.shields.io/pypi/pyversions/phylocass.svg)](https://pypi.org/project/phylocass/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -236,7 +238,7 @@ phylocass examples/conflicting_trees.newick --plot network.png
 [`examples/plot_network.py`](examples/plot_network.py) is the same thing as a
 script you can edit.
 
-![Two conflicting input trees and the level-1 network Cass builds from their clusters](docs/example-network.png)
+![Two conflicting input trees and the level-1 network Cass builds from their clusters](https://raw.githubusercontent.com/leovaniersel/PhyloCass/main/docs/example-network.png)
 
 Reticulation edges are red by default. The one reticulation has two incoming
 edges, and switching on one or the other recovers exactly the two input trees:

@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <circle cx="50" cy="50" r="48" fill="#eef3f8"/>
+
+  <!-- ground -->
+  <path d="M 22 86 L 78 86" stroke="#c9b79c" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- legs -->
+  <path d="M 49 70 L 47 84" stroke="#8a8078" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <path d="M 61 70 L 63 84" stroke="#8a8078" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <path d="M 41 85 L 51.5 85" stroke="#8a8078" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M 57.5 85 L 68 85" stroke="#8a8078" stroke-width="4" fill="none" stroke-linecap="round"/>
+
+  <!-- neck, rising from the body -->
+  <path d="M 45 55 C 39 47, 35 39, 34 32" stroke="#4a90c4" stroke-width="12" fill="none" stroke-linecap="round"/>
+
+  <!-- body: the heavy black plumage, with the drooping tail plume at the rear -->
+  <path d="M 74 50 C 80 55, 80 66, 74 71 Z" fill="#2b2b33"/>
+  <ellipse cx="55" cy="61" rx="21.5" ry="16.5" fill="#33333c" transform="rotate(-7 55 61)"/>
+  <ellipse cx="60" cy="58" rx="12.5" ry="8.5" fill="#43434f" transform="rotate(-12 60 58)"/>
+
+  <!-- wattles: the cassowary's signature, hanging at the throat -->
+  <ellipse cx="32" cy="38" rx="3" ry="5.6" fill="#cc5049" transform="rotate(-8 32 38)"/>
+  <ellipse cx="38.5" cy="38.5" rx="2.8" ry="5" fill="#cc5049" transform="rotate(6 38.5 38.5)"/>
+
+  <!-- head -->
+  <ellipse cx="33" cy="28" rx="8.5" ry="7.5" fill="#4a90c4"/>
+
+  <!-- casque: the horn helmet, the cassowary's most diagnostic feature -->
+  <path d="M 26.5 23 C 25.5 13, 29.5 7, 35.5 7 C 40.5 7, 42.5 15.5, 41 23 Z" fill="#c99a5e"/>
+  <path d="M 26.5 23 C 25.5 13, 29.5 7, 35.5 7 C 34 12, 32 17, 31.5 23 Z" fill="#d8ac71"/>
+
+  <!-- beak -->
+  <path d="M 27 29.5 L 18 32.5 L 27 34.5 Z" fill="#57575f"/>
+
+  <!-- eye -->
+  <circle cx="31" cy="26.5" r="2" fill="#23232a"/>
+  <circle cx="31.7" cy="25.9" r="0.75" fill="#ffffff"/>
+</svg>
