@@ -532,6 +532,17 @@ Sixteen times the taxa costs about thirty times the time, because the component
 Cass actually searches grows far more slowly than the input. A dataset whose
 disagreements are local stays fast however many taxa it has.
 
+That effect is starker still on networks with many *small* conflicts. Sampling
+multi-blob networks (a tree of blobs, each blob a level-≤2 generator) and
+holding the reticulation count near ten while the taxa grow:
+
+| taxa | 10 | 20 | 40 | 80 | 160 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| median time | 0.003 s | 0.006 s | 0.010 s | 0.011 s | 0.019 s |
+
+Sixteen times the taxa for six times the time, because each blob collapses to a
+component of at most four blocks no matter how large the dataset is.
+
 The exponent does bite when the *conflict* is large rather than the dataset:
 level 4 on 6–7 mutually conflicting taxa takes seconds to tens of seconds, and
 that is inherent rather than an implementation problem.
@@ -554,14 +565,21 @@ Four kinds of test carry the weight:
   in three cases found a level-1 network — the sampled network's clusters did
   not need its second reticulation.
 
-  Worth knowing what the sampler covers: networks are built by hanging a fresh
-  leaf below each new reticulation, so nearly every reticulation sits directly
-  above a leaf, which is also the shape Cass's own construction produces.
-  Level-2 networks whose reticulations sit above whole subtrees are
-  under-represented and the four level-2 generators are not sampled uniformly.
-  The check stays sound either way — the sampled network itself witnesses that
-  a level-2 solution exists — but the coverage is narrower than the counts
-  suggest.
+- **Generator-based sampling.** The round-trip above builds its networks by
+  hanging a fresh leaf below each new reticulation, which always gives one blob
+  and puts ~95% of reticulations directly above a leaf — the very shape Cass's
+  own construction produces. [`tests/blobsampler.py`](tests/blobsampler.py)
+  samples properly instead: it expands a random *tree of blobs*, each internal
+  node becoming a simple level-k network built from one of PhyloZoo's level-k
+  generators (`all_level_k_generators`, 1/1/4/65 for k = 0…3) with one
+  attachment point per child.
+
+  That covers what the simple sampler misses — networks come out with a median
+  of 6 blobs and up to 12, 46% of reticulations sit above whole subtrees rather
+  than leaves, and 97% of networks nest a blob directly below another blob's
+  reticulation. Across 499 such networks on 20 taxa with blobs up to level 1, 2
+  and 3, Cass represented every input cluster and never exceeded the source
+  network's level.
 - **Agreement with PhyloZoo.** The search's own softwired-cluster and level
   routines are checked against PhyloZoo's `displayed_trees` and `level` on
   random networks, and every finished network must pass `validate()`.
